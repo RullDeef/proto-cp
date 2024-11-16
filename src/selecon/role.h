@@ -1,0 +1,7 @@
+#pragma once
+
+enum SRole {
+  SROLE_CLIENT,
+  SROLE_TRANSMITTER,
+  SROLE_TRANSCODER,
+};

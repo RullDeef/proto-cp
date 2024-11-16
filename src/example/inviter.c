@@ -1,3 +1,4 @@
+#include "endpoint.h"
 #include "error.h"
 #include "selecon.h"
 #include <stdio.h>
@@ -8,15 +9,18 @@ int run_inviter(char *address, int timeout_ms, const char *filename) {
 
   struct SContext *context = selecon_context_alloc();
 
-  // char *colon = strrchr(address, ':');
-  // int port = atoi(colon + 1);
-  // *colon = '\0';
-  // int af = strchr(address, ':') == NULL ? AF_INET : AF_INET6;
-  // inet_pton(af, address, );
-
-  err = selecon_invite_by_ip(context, address, timeout_ms);
+  struct SEndpoint endpoint;
+  err = selecon_parse_endpoint2(&endpoint, address);
   if (err != SELECON_OK) {
-    perror("selecon_invite_by_ip");
+    perror("selecon_parse_endpoint2");
+    goto cleanup;
+  }
+
+  struct SInvite invite;
+  invite.timeout = timeout_ms;
+  err = selecon_invite(context, &endpoint, &invite);
+  if (err != SELECON_OK) {
+    perror("selecon_invite");
     goto cleanup;
   }
 

@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.10)
 project(selecon)
 
 set(CMAKE_C_STANDARD 11)
-SET(CMAKE_C_STANDARD_REQUIRED on)
+set(CMAKE_C_STANDARD_REQUIRED on)
+
+set(CMAKE_DEBUG_TARGET_PROPERTIES -ggdb)
 
 file(GLOB SELECON_LIB_SOURCES src/selecon/*.c)
 file(GLOB EXAMPLE_SOURCES src/example/*.c)

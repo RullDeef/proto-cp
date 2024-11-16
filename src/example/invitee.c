@@ -5,12 +5,10 @@
 #include <unistd.h>
 
 int run_invitee(const char *address, const char *filename) {
-  enum SError err = SELECON_OK;
-
   struct SContext *context = selecon_context_alloc();
 
-  err = strcmp(address, "any") == 0 ? selecon_wait_invite(context)
-                                    : selecon_wait_invite2(context, address);
+  enum SError err =  selecon_accept_invite(context,
+      strcmp(address, "any") == 0 ? NULL: address);
   if (err != SELECON_OK) {
     perror("selecon_wait_invite(2)");
     goto cleanup;
