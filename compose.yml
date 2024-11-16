@@ -1,0 +1,22 @@
+services:
+  user1: &userTemplate
+    build: .
+    volumes:
+      - ./build:/app:ro
+    networks:
+      net1:
+        ipv4_address: 192.168.200.1
+    entrypoint: [ '/app/example' ]
+  user2:
+    <<: *userTemplate
+    networks:
+      net1:
+        ipv4_address: 192.168.200.2
+networks:
+  net1:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.200.0/24
+          gateway: 192.168.200.254
+
