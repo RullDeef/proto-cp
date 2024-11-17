@@ -116,7 +116,10 @@ enum SError sconn_recv(struct SConnection *con, struct SMessage** msg) {
         perror("recv");
         return SELECON_CON_ERROR;
     }
-    *msg = message_alloc(size);
+    if (*msg == NULL || (*msg)->size < size) {
+        message_free(*msg);
+        *msg = message_alloc(size);
+    }
     if (recv(con->fd, &(*msg)->type, size, 0) == -1) {
         perror("recv");
         return SELECON_CON_ERROR;

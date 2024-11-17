@@ -56,7 +56,7 @@ static int process_dump_cmd(char* cmd) {
 
 static int cmd_loop(void) {
   context = selecon_context_alloc();
-  enum SError err = selecon_context_init2(context, participant_address);
+  enum SError err = selecon_context_init2(context, participant_address, NULL);
   if (err != SELECON_OK) {
     printf("failed to initialize context: err = %s", serror_str(err));
     return -1;
