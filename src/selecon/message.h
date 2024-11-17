@@ -2,7 +2,13 @@
 
 #include <stddef.h>
 
-struct SFrameMessage;
+#include "endpoint.h"
+#include "participant.h"
+#include "stypes.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #pragma pack(push, 1)
 
@@ -11,7 +17,8 @@ enum SMsgType {
 	// sends this message. Must be accepted or rejected by receiver
 	SMSG_INVITE,
 
-	// invite accepted. No additional data
+	// invite accepted. Contains address of invited participant that is listening for incoming
+	// connections
 	SMSG_INVITE_ACCEPT,
 
 	// invite rejected. No additional data
@@ -29,7 +36,8 @@ enum SMsgType {
 	// audio data
 	SMSG_AUDIO,
 
-	// video packet received. Contains recording timestamp and id of participants with regions in merged frames
+	// video packet received. Contains recording timestamp and id of participants with regions in
+	// merged frames
 	SMSG_VIDEO,
 };
 
@@ -42,12 +50,27 @@ struct SMessage {
 	// message-specific params here
 };
 
+struct SMsgInvite {
+	struct SMessage base;
+	conf_id_t conf_id;
+	part_id_t part_id;
+	char part_name[];
+};
+
+struct SMsgInviteAccept {
+	struct SMessage base;
+	part_id_t id;         // invited participant id
+	struct SEndpoint ep;  // listening endpoint
+	char name[];          // invited participant name (NULL-terminated)
+};
+
 struct SMsgPartPresence {
 	struct SMessage base;
-	size_t count;
-	struct PresenseState {
-		unsigned long long part_id;
-		enum PrState {
+	size_t count;  // amount of states[]
+	struct PartPresenceState {
+		part_id_t id;
+		struct SEndpoint ep;
+		enum PresenceState {
 			PART_JOIN,
 			PART_LEAVE,
 		} state;
@@ -57,4 +80,16 @@ struct SMsgPartPresence {
 #pragma pack(pop)
 
 struct SMessage* message_alloc(size_t size);
+struct SMessage* message_alloc2(size_t size, enum SMsgType type);
 void message_free(struct SMessage** msg);
+
+struct SMessage* message_invite_alloc(conf_id_t conf_id, part_id_t part_id, const char* part_name);
+struct SMessage* message_invite_accept_alloc(part_id_t id, const char* name, struct SEndpoint* ep);
+struct SMessage* message_invite_reject_alloc(void);
+
+// allocates part presence message with given states count
+struct SMsgPartPresence* message_part_presence_alloc(size_t count);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif

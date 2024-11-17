@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #include "error.h"
 
 struct SEndpoint;
@@ -18,8 +20,16 @@ enum SError sconn_connect(struct SConnection **con, struct SEndpoint *ep);
 // closes connection and frees all allocated resources
 enum SError sconn_disconnect(struct SConnection **con);
 
+// does not free message upon errors
 enum SError sconn_send(struct SConnection *con, struct SMessage *msg);
 
 // allocates new message if ariving message does not fit into provided one.
 // Does not free message upon errors
 enum SError sconn_recv(struct SConnection *con, struct SMessage **msg);
+
+// waits on many connections for incoming messages
+enum SError sconn_recv_one(struct SConnection **cons,
+                           size_t count,
+                           struct SMessage **msg,
+                           size_t *ready_index,
+                           int timeout_ms);
