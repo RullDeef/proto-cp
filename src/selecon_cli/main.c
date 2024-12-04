@@ -29,6 +29,11 @@ static const char* help_message =
 static const char* participant_address = NULL;
 static struct SContext* context        = NULL;
 
+static void media_handler(part_id_t part_id, struct AVFrame *frame) {
+  printf("media frame recvd from part %llu\n", part_id);
+  av_frame_free(&frame);
+}
+
 static int process_invite_cmd(char* cmd) {
 	char* addr = strchr(cmd, ' ');
 	if (addr == NULL) {
@@ -59,7 +64,7 @@ static int process_dump_cmd(char* cmd) {
 
 static int cmd_loop(void) {
 	context         = selecon_context_alloc();
-	enum SError err = selecon_context_init2(context, participant_address, NULL);
+	enum SError err = selecon_context_init2(context, participant_address, NULL, media_handler);
 	if (err != SELECON_OK) {
 		printf("failed to initialize context: err = %s", serror_str(err));
 		return -1;

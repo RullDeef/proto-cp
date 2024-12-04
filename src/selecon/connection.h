@@ -1,12 +1,16 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "error.h"
 
 struct SEndpoint;
 struct SConnection;
 struct SMessage;
+
+// debug output of connection state
+void sconn_dump(FILE *fd, struct SConnection *con);
 
 // allocates listener for incoming connections on given endpoint
 enum SError sconn_listen(struct SConnection **con, struct SEndpoint *ep);

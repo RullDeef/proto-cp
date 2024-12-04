@@ -16,6 +16,16 @@ struct SConnection {
 	struct SEndpoint dst_ep;
 };
 
+void sconn_dump(FILE *fd, struct SConnection *con) {
+  if (fd == NULL || con == NULL)
+    return;
+  fprintf(fd, "{src:");
+  selecon_endpoint_dump(fd, &con->src_ep);
+  fprintf(fd, ", dst:");
+  selecon_endpoint_dump(fd, &con->dst_ep);
+  fprintf(fd, "}");
+}
+
 enum SError sconn_listen(struct SConnection **con, struct SEndpoint *ep) {
 	if (con == NULL || ep == NULL)
 		return SELECON_INVALID_ARG;

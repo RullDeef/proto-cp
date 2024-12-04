@@ -13,37 +13,16 @@
 #include "error.h"
 #include "message.h"
 #include "participant.h"
+#include "context.h"
 
-struct SContext {
-	bool initialized;
-
-	// conference id. Used to detect that users participate in the same conference. At start
-	// initialized with random value. By default, conf id of incoming invite will be examined and if
-	// it will differ from this one - this user will send all other participants (if any) that it is
-	// leaving current conference before entering new one
-	conf_id_t conf_id;
-
-	// array of connections to all other conference participants
-	struct SParticipant *participants;
-
-	// number of elements in participants array plus one (self)
-	size_t nb_participants;
-
-	// mutex for exclusive access to participants array
-	pthread_mutex_t part_mutex;
-
-	// connection for self is NULL
-	struct SParticipant self;
-
-	// listener thread for incoming invitations
-	pthread_t listener_thread;
-	struct SEndpoint listen_ep;
-	invite_handler_fn_t invite_handler;
-
-	// recver thread for messages from active conference participants. Valid for nb_participants > 1
-	pthread_t conf_thread;
-	bool conf_thread_working;
-};
+static int init_recursive_mutex(pthread_mutex_t *mutex) {
+	pthread_mutexattr_t attr;
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+	int ret = pthread_mutex_init(mutex, &attr);
+	pthread_mutexattr_destroy(&attr);
+  return ret;
+}
 
 struct SContext *selecon_context_alloc(void) {
 	return calloc(1, sizeof(struct SContext));
@@ -60,6 +39,7 @@ void scontext_destroy(struct SContext *context) {
 		free(context->participants);
 		spart_destroy(&context->self);
 		pthread_mutex_destroy(&context->part_mutex);
+    scont_free(&context->streams);
 	}
 }
 
@@ -224,6 +204,11 @@ static void *invite_worker(void *arg) {
 			if (err != SELECON_OK || invite == NULL)
 				sconn_disconnect(&part_con);
 			else {
+#ifndef NDEBUG
+        printf("successful handshake con = ");
+        sconn_dump(stdout, part_con);
+        printf("\n");
+#endif
 				if (ctx->conf_id != invite->conf_id) {
 					selecon_leave_conference(ctx);  // leave old conference
 					ctx->conf_id = invite->conf_id;
@@ -243,7 +228,8 @@ static void *invite_worker(void *arg) {
 
 enum SError selecon_context_init(struct SContext *ctx,
                                  struct SEndpoint *ep,
-                                 invite_handler_fn_t invite_handler) {
+                                 invite_handler_fn_t invite_handler,
+                                 media_handler_fn_t media_handler) {
 	if (ctx == NULL)
 		return SELECON_INVALID_ARG;
 	if (ctx->initialized)
@@ -259,13 +245,10 @@ enum SError selecon_context_init(struct SContext *ctx,
 	ctx->self            = spart_init(SELECON_DEFAULT_PART_NAME);
 	ctx->participants    = NULL;
 	ctx->nb_participants = 1;
-	pthread_mutexattr_t attr;
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-	pthread_mutex_init(&ctx->part_mutex, &attr);
-	pthread_mutexattr_destroy(&attr);
+  init_recursive_mutex(&ctx->part_mutex);
 	ctx->listen_ep           = *ep;
 	ctx->invite_handler      = invite_handler == NULL ? selecon_accept_any : invite_handler;
+  ctx->media_handler       = media_handler;
 	ctx->initialized         = true;
 	ctx->conf_thread_working = false;
 	if (pthread_create(&ctx->listener_thread, NULL, invite_worker, ctx) != 0) {
@@ -274,21 +257,25 @@ enum SError selecon_context_init(struct SContext *ctx,
 		ctx->initialized = false;
 		return SELECON_PTHREAD_ERROR;
 	}
+#ifndef NDEBUG
 	printf("init selecon ctx [listens ");
 	selecon_endpoint_dump(stdout, ep);
 	printf("]\n");
+#endif
+  scont_init(&ctx->streams);
 	return SELECON_OK;
 }
 
 enum SError selecon_context_init2(struct SContext *context,
                                   const char *address,
-                                  invite_handler_fn_t invite_handler) {
+                                  invite_handler_fn_t invite_handler,
+                                  media_handler_fn_t media_handler) {
 	if (address == NULL)
-		return selecon_context_init(context, NULL, invite_handler);
+		return selecon_context_init(context, NULL, invite_handler, media_handler);
 	struct SEndpoint ep;
 	enum SError err = selecon_parse_endpoint2(&ep, address);
 	if (err == SELECON_OK)
-		err = selecon_context_init(context, &ep, invite_handler);
+		err = selecon_context_init(context, &ep, invite_handler, media_handler);
 	return err;
 }
 
@@ -392,8 +379,43 @@ enum SError selecon_leave_conference(struct SContext *context) {
 	return SELECON_OK;
 }
 
-// sends audio frame to other participants
-enum SError selecon_send_audio_frame(struct SContext *context, struct SFrame *frame);
 
-// sends video frame to other participants
-enum SError selecon_send_video_frame(struct SContext *context, struct SFrame *frame);
+// 48kHz 16bit mono audio signal supported for now (opus codec)
+enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *stream_id) {
+  if (context == NULL || stream_id == NULL)
+    return SELECON_INVALID_ARG;
+  if (!context->initialized)
+    return SELECON_EMPTY_CONTEXT;
+  *stream_id = scont_alloc_audio_stream(&context->streams, SSTREAM_OUTPUT);
+  return SELECON_OK;
+}
+
+enum SError selecon_stream_alloc_video(struct SContext *context,
+                                       sstream_id_t *stream_id,
+                                       size_t width,
+                                       size_t height) {
+  if (context == NULL || stream_id == NULL || width < SELECON_MIN_VIDEO_WIDTH || height < SELECON_MIN_VIDEO_HEIGHT)
+    return SELECON_INVALID_ARG;
+  if (!context->initialized)
+    return SELECON_EMPTY_CONTEXT;
+  *stream_id = scont_alloc_video_stream(&context->streams, SSTREAM_OUTPUT, width, height);
+  return SELECON_OK;
+}
+
+// closes stream
+void selecon_stream_free(struct SContext *context, sstream_id_t *stream_id) {
+  if (context == NULL || stream_id == NULL)
+    return;
+  if (!context->initialized)
+    return;
+  scont_close_stream(&context->streams, *stream_id);
+  *stream_id = NULL;
+}
+
+enum SError selecon_stream_push_frame(struct SContext *context, sstream_id_t stream_id, struct AVFrame *frame) {
+  if (context == NULL || stream_id == NULL || frame == NULL)
+    return SELECON_INVALID_ARG;
+  if (!context->initialized)
+    return SELECON_EMPTY_CONTEXT;
+  return scont_push_frame(&context->streams, stream_id, frame);
+}

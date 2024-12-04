@@ -29,14 +29,16 @@ void selecon_context_free(struct SContext **context);
 // invite_handler - if NULL accepts any
 enum SError selecon_context_init(struct SContext *context,
                                  struct SEndpoint *ep,
-                                 invite_handler_fn_t invite_handler);
+                                 invite_handler_fn_t invite_handler,
+                                 media_handler_fn_t media_handler);
 
 // sets up context params
 //
 // address - current participant endpoint address, if NULL - default used
 enum SError selecon_context_init2(struct SContext *context,
                                   const char *address,
-                                  invite_handler_fn_t invite_handler);
+                                  invite_handler_fn_t invite_handler,
+                                  media_handler_fn_t media_handler);
 
 // print current context state for debugging
 void selecon_context_dump(FILE *fd, struct SContext *context);
@@ -56,11 +58,20 @@ enum SError selecon_invite2(struct SContext *context, const char *address);
 // tell everybody in conference your intention to leave and disconnect from all of them
 enum SError selecon_leave_conference(struct SContext *context);
 
-// sends audio frame to other participants
-enum SError selecon_send_audio_frame(struct SContext *context, struct SFrame *frame);
+// 48kHz 16bit mono audio signal supported for now (opus codec)
+enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *stream_id);
 
-// sends video frame to other participants
-enum SError selecon_send_video_frame(struct SContext *context, struct SFrame *frame);
+enum SError selecon_stream_alloc_video(struct SContext *context,
+                                       sstream_id_t *stream_id,
+                                       size_t width,
+                                       size_t height);
+
+// closes stream
+void selecon_stream_free(struct SContext *context, sstream_id_t *stream_id);
+
+// audio frame must be 20/40/80 ms long at 48kHz mono (960/1920/3840 samples).
+// video frame must conform to selected stream resolution
+enum SError selecon_stream_push_frame(struct SContext *context, sstream_id_t stream_id, struct AVFrame *frame);
 
 #ifdef __cplusplus
 }  // extern "C"

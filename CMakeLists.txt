@@ -19,12 +19,24 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(libav REQUIRED IMPORTED_TARGET
+    #libavdevice
+    #libavfilter
+    libavformat
+    libavcodec
+    libswresample
+    #libswscale
+    libavutil
+)
+
 file(GLOB SELECON_LIB_SOURCES src/selecon/*.c)
 file(GLOB CLI_SOURCES src/selecon_cli/*.c)
 file(GLOB TEST_SOURCES src/tests/*.cpp)
 
 add_library(selecon ${SELECON_LIB_SOURCES})
 target_include_directories(selecon INTERFACE src/selecon)
+target_link_libraries(selecon PUBLIC avutil avformat avcodec)
 
 add_executable(selecon_cli ${CLI_SOURCES})
 target_link_libraries(selecon_cli selecon)
