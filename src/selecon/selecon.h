@@ -71,7 +71,9 @@ void selecon_stream_free(struct SContext *context, sstream_id_t *stream_id);
 
 // audio frame must be 20/40/80 ms long at 48kHz mono (960/1920/3840 samples).
 // video frame must conform to selected stream resolution
-enum SError selecon_stream_push_frame(struct SContext *context, sstream_id_t stream_id, struct AVFrame *frame);
+enum SError selecon_stream_push_frame(struct SContext *context,
+                                      sstream_id_t stream_id,
+                                      struct AVFrame *frame);
 
 #ifdef __cplusplus
 }  // extern "C"

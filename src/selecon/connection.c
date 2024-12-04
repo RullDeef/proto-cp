@@ -17,13 +17,13 @@ struct SConnection {
 };
 
 void sconn_dump(FILE *fd, struct SConnection *con) {
-  if (fd == NULL || con == NULL)
-    return;
-  fprintf(fd, "{src:");
-  selecon_endpoint_dump(fd, &con->src_ep);
-  fprintf(fd, ", dst:");
-  selecon_endpoint_dump(fd, &con->dst_ep);
-  fprintf(fd, "}");
+	if (fd == NULL || con == NULL)
+		return;
+	fprintf(fd, "{src:");
+	selecon_endpoint_dump(fd, &con->src_ep);
+	fprintf(fd, ", dst:");
+	selecon_endpoint_dump(fd, &con->dst_ep);
+	fprintf(fd, "}");
 }
 
 enum SError sconn_listen(struct SConnection **con, struct SEndpoint *ep) {

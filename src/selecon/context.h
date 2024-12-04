@@ -2,9 +2,10 @@
 
 #include <pthread.h>
 
+#include "endpoint.h"
 #include "participant.h"
-#include "stypes.h"
 #include "stream.h"
+#include "stypes.h"
 
 struct SContext {
 	bool initialized;
@@ -36,6 +37,6 @@ struct SContext {
 	pthread_t conf_thread;
 	bool conf_thread_working;
 
-  struct SStreamContainer streams;
-  media_handler_fn_t media_handler;
+	struct SStreamContainer streams;
+	media_handler_fn_t media_handler;
 };

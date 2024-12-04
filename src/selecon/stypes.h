@@ -1,7 +1,7 @@
 #pragma once
 
-#include <stdbool.h>
 #include <libavutil/frame.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +22,7 @@ struct SInvite;
 struct SStream;
 
 // identifier for accessing stream by client
-typedef struct SStream* sstream_id_t;
+typedef struct SStream *sstream_id_t;
 
 // Main struct for holding conference state
 struct SContext;

@@ -11,7 +11,6 @@ extern "C" {
 #endif
 
 struct SEndpoint {
-	int port;
 	union {
 		sa_family_t af;
 		struct sockaddr addr;
