@@ -41,8 +41,7 @@ static void stub_read_file(struct Stub* stub,
 		}
 	}
 	if (v_stream != NULL) {
-		enum SError err = selecon_stream_alloc_video(
-		    stub->context, &video_stream_id, v_stream->codecpar->width, v_stream->codecpar->height);
+		enum SError err = selecon_stream_alloc_video(stub->context, &video_stream_id);
 		if (err != SELECON_OK) {
 			perror("selecon_stream_alloc_video");
 			selecon_stream_free(stub->context, &audio_stream_id);
@@ -82,7 +81,7 @@ static void stub_read_file(struct Stub* stub,
 		int64_t ts_delta = 0;
 		while (true) {
 			int ret = avcodec_receive_frame(codecCtx, frame);
-			if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF || ret == 0)
+			if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
 				break;
 			else if (ret < 0) {
 				perror("avcodec_receive_frame");
@@ -93,13 +92,11 @@ static void stub_read_file(struct Stub* stub,
 			if (err != SELECON_OK) {
 				perror("selecon_stream_push_frame");
 				goto free_frames;
-			} else {
-				printf("media frame pushed!\n");  // debug log
 			}
 		}
 		av_packet_unref(packet);
 		// realtime delay emulation
-		int64_t time_delta = av_rescale_q(ts_delta, av_make_q(1, 1000000), a_stream->time_base);
+		int64_t time_delta = av_rescale_q(ts_delta, a_stream->time_base, av_make_q(1, 1000000));
 		usleep(time_delta);
 	}
 free_frames:
@@ -128,7 +125,6 @@ static void* stub_dynamic_worker(void* arg) {
 		perror("av_find_best_stream");
 		goto close_input;
 	}
-	printf("astream index: %d, vstream index: %d\n", astream_index, vstream_index);
 	struct AVCodecContext* a_ctx = NULL;
 	struct AVStream* a_stream    = NULL;
 	if (acodec != NULL) {

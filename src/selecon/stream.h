@@ -1,13 +1,16 @@
 #pragma once
 
 #include <libavcodec/avcodec.h>
+#include <libavcodec/packet.h>
 #include <libavutil/frame.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "error.h"
+#include "participant.h"
 #include "stypes.h"
 
 enum SStreamType {
@@ -21,28 +24,41 @@ enum SStreamDirection {
 };
 
 struct SFrame {
-	struct AVFrame *avframe;
+	struct AVFrame *avframe;    // valid for output streams
+	struct AVPacket *avpacket;  // valid for input streams
 	struct SFrame *next;
 };
+
+typedef void (*packet_handler_fn_t)(part_id_t part_id, struct AVPacket *packet);
 
 struct SStream {
 	enum SStreamType type;
 	enum SStreamDirection dir;
-	// ? part_id_t part_id;
+	part_id_t part_id;
 
-	// for video streams
-	size_t width;
-	size_t height;
+	// callback valid for input streams. Called for each received media frame
+	media_handler_fn_t media_handler;
 
-	struct AVCodecContext *codecCtx;
+	// callback valid for output streams. Called for each encoded media packet
+	packet_handler_fn_t packet_handler;
+
+	struct AVCodecContext *codec_ctx;
 
 	// if this is input stream - queue holds recvd frames from paired participant.
 	// if this is output stream - queue holds frames ready to be send
 	struct SFrame *queue;
 	struct SFrame *tail;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;  // handler_thread must wait until queue is not empty
+
+	// worker thread that does encoding/decoding job and calls callbacks
+	pthread_t handler_thread;
 };
 
 struct SStreamContainer {
+	media_handler_fn_t media_handler;
+	packet_handler_fn_t packet_handler;
+
 	// outgoing data streams. Client submits audio/video data through this streams
 	// and then worker threads send media to other participants.
 	struct SStream **in;
@@ -55,20 +71,22 @@ struct SStreamContainer {
 	size_t nb_out;
 
 	// mutex for exclusive access to streams arrays
-	pthread_mutex_t mutex;
+	pthread_rwlock_t mutex;
 };
 
-void scont_init(struct SStreamContainer *cont);
+void scont_init(struct SStreamContainer *cont,
+                media_handler_fn_t media_handler,
+                packet_handler_fn_t packet_handler);
 void scont_free(struct SStreamContainer *cont);
 
-sstream_id_t scont_alloc_audio_stream(struct SStreamContainer *cont, enum SStreamDirection dir);
+void scont_dump(FILE *fp, struct SStreamContainer *cont);
 
-sstream_id_t scont_alloc_video_stream(struct SStreamContainer *cont,
-                                      enum SStreamDirection dir,
-                                      size_t width,
-                                      size_t height);
+sstream_id_t scont_alloc_stream(struct SStreamContainer *cont,
+                                part_id_t part_id,
+                                enum SStreamType type,
+                                enum SStreamDirection dir);
 
-void scont_close_stream(struct SStreamContainer *cont, sstream_id_t stream);
+void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream);
 
 bool scont_has_stream(struct SStreamContainer *cont, sstream_id_t stream);
 
@@ -79,3 +97,7 @@ bool scont_stream_empty(struct SStreamContainer *cont, sstream_id_t stream);
 enum SError scont_push_frame(struct SStreamContainer *cont,
                              sstream_id_t stream,
                              struct AVFrame *frame);
+
+enum SError scont_push_packet(struct SStreamContainer *cont,
+                              sstream_id_t stream,
+                              struct AVPacket *packet);

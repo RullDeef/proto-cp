@@ -61,10 +61,7 @@ enum SError selecon_leave_conference(struct SContext *context);
 // 48kHz 16bit mono audio signal supported for now (opus codec)
 enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *stream_id);
 
-enum SError selecon_stream_alloc_video(struct SContext *context,
-                                       sstream_id_t *stream_id,
-                                       size_t width,
-                                       size_t height);
+enum SError selecon_stream_alloc_video(struct SContext *context, sstream_id_t *stream_id);
 
 // closes stream
 void selecon_stream_free(struct SContext *context, sstream_id_t *stream_id);

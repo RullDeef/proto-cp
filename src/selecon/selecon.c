@@ -1,5 +1,6 @@
 #include "selecon.h"
 
+#include <libavcodec/packet.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -14,6 +15,7 @@
 #include "error.h"
 #include "message.h"
 #include "participant.h"
+#include "stream.h"
 
 static int init_recursive_mutex(pthread_mutex_t *mutex) {
 	pthread_mutexattr_t attr;
@@ -57,7 +59,7 @@ static void add_participant(struct SContext *ctx,
                             struct SConnection *con) {
 	pthread_mutex_lock(&ctx->part_mutex);
 	ctx->participants =
-	    realloc(ctx->participants, ctx->nb_participants * sizeof(struct SParticipant));
+	    reallocarray(ctx->participants, ctx->nb_participants, sizeof(struct SParticipant));
 	size_t index                        = ctx->nb_participants - 1;
 	ctx->participants[index].id         = id;
 	ctx->participants[index].connection = con;
@@ -152,12 +154,18 @@ static void handle_message(struct SContext *ctx, size_t part_index, struct SMess
 	}
 }
 
+static void packet_handler(part_id_t part_id, struct AVPacket *packet) {
+	printf("received packet in handler!\n");
+	av_packet_free(&packet);
+	return;
+}
+
 static void *conf_worker(void *arg) {
 	struct SContext *ctx     = arg;
 	ctx->conf_thread_working = true;
 	pthread_mutex_lock(&ctx->part_mutex);
 	size_t cons_count         = ctx->nb_participants - 1;
-	struct SConnection **cons = malloc(cons_count * sizeof(struct SConnection *));
+	struct SConnection **cons = calloc(cons_count, sizeof(struct SConnection *));
 	for (size_t i = 0; i < cons_count; ++i) cons[i] = ctx->participants[i].connection;
 	pthread_mutex_unlock(&ctx->part_mutex);
 	struct SMessage *msg = NULL;
@@ -169,7 +177,7 @@ static void *conf_worker(void *arg) {
 		if (cons_count != ctx->nb_participants - 1) {
 			pthread_mutex_lock(&ctx->part_mutex);
 			cons_count = ctx->nb_participants - 1;
-			cons       = realloc(cons, cons_count * sizeof(struct SConnection *));
+			cons       = reallocarray(cons, cons_count, sizeof(struct SConnection *));
 			for (size_t i = 0; i < cons_count; ++i) cons[i] = ctx->participants[i].connection;
 			pthread_mutex_unlock(&ctx->part_mutex);
 		}
@@ -262,7 +270,7 @@ enum SError selecon_context_init(struct SContext *ctx,
 	selecon_endpoint_dump(stdout, ep);
 	printf("]\n");
 #endif
-	scont_init(&ctx->streams);
+	scont_init(&ctx->streams, media_handler, packet_handler);
 	return SELECON_OK;
 }
 
@@ -298,6 +306,7 @@ void selecon_context_dump(FILE *fd, struct SContext *context) {
 		spart_dump(fd, &context->participants[i]);
 		fprintf(fd, "\n");
 	}
+	scont_dump(fd, &context->streams);
 	pthread_mutex_unlock(&context->part_mutex);
 }
 
@@ -385,20 +394,18 @@ enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *s
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
-	*stream_id = scont_alloc_audio_stream(&context->streams, SSTREAM_OUTPUT);
+	*stream_id =
+	    scont_alloc_stream(&context->streams, context->self.id, SSTREAM_AUDIO, SSTREAM_OUTPUT);
 	return SELECON_OK;
 }
 
-enum SError selecon_stream_alloc_video(struct SContext *context,
-                                       sstream_id_t *stream_id,
-                                       size_t width,
-                                       size_t height) {
-	if (context == NULL || stream_id == NULL || width < SELECON_MIN_VIDEO_WIDTH ||
-	    height < SELECON_MIN_VIDEO_HEIGHT)
+enum SError selecon_stream_alloc_video(struct SContext *context, sstream_id_t *stream_id) {
+	if (context == NULL || stream_id == NULL)
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
-	*stream_id = scont_alloc_video_stream(&context->streams, SSTREAM_OUTPUT, width, height);
+	*stream_id =
+	    scont_alloc_stream(&context->streams, context->self.id, SSTREAM_VIDEO, SSTREAM_OUTPUT);
 	return SELECON_OK;
 }
 
@@ -406,10 +413,8 @@ enum SError selecon_stream_alloc_video(struct SContext *context,
 void selecon_stream_free(struct SContext *context, sstream_id_t *stream_id) {
 	if (context == NULL || stream_id == NULL || *stream_id == NULL)
 		return;
-	if (!context->initialized)
-		return;
-	scont_close_stream(&context->streams, *stream_id);
-	*stream_id = NULL;
+	if (context->initialized)
+		scont_close_stream(&context->streams, stream_id);
 }
 
 enum SError selecon_stream_push_frame(struct SContext *context,
