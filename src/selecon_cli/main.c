@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "dump.h"
 #include "selecon.h"
 #include "stub.h"
 
@@ -31,6 +32,8 @@ static const char* help_message =
 static const char* participant_address = NULL;
 static struct SContext* context        = NULL;
 static struct Stub* stub               = NULL;
+
+static struct PacketDump* self_dumper = NULL;
 
 static void media_handler(part_id_t part_id, struct AVFrame* frame) {
 	printf("media frame recvd from part %llu\n", part_id);
@@ -68,9 +71,7 @@ static int process_dump_cmd(char* cmd) {
 static int process_stub_cmd(char* cmd) {
 	char* media_file = strchr(cmd, ' ');
 	if (media_file == NULL) {
-		printf(
-		    "usage: stub <media_file>\n"
-		    "   or: stub off\n");
+		printf("usage: stub <media_file>\n   or: stub off\n");
 		return 0;
 	}
 	++media_file;
@@ -139,5 +140,9 @@ int main(int argc, char** argv) {
 			return -1;
 		}
 	}
-	return cmd_loop();
+	// init self dumper
+	self_dumper = pdump_create("self.mp4", 1);
+	int ret     = cmd_loop();
+	pdump_free(&self_dumper);
+	return ret;
 }
