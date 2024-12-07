@@ -2,6 +2,7 @@
 
 #include <libavcodec/avcodec.h>
 #include <libavcodec/packet.h>
+#include <libavfilter/avfilter.h>
 #include <libavutil/frame.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -10,6 +11,7 @@
 #include <stdio.h>
 
 #include "error.h"
+#include "media_filters.h"
 #include "participant.h"
 #include "stypes.h"
 
@@ -43,6 +45,7 @@ struct SStream {
 	packet_handler_fn_t packet_handler;
 
 	struct AVCodecContext *codec_ctx;
+	struct MediaFilterGraph filter_graph;
 
 	// if this is input stream - queue holds recvd frames from paired participant.
 	// if this is output stream - queue holds frames ready to be send

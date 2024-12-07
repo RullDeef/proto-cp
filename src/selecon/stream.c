@@ -6,13 +6,19 @@
 #include <libavcodec/codec.h>
 #include <libavcodec/codec_id.h>
 #include <libavcodec/packet.h>
+#include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
+#include <libavutil/mathematics.h>
+#include <libavutil/rational.h>
+#include <libavutil/samplefmt.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "avutility.h"
 #include "config.h"
 #include "error.h"
+#include "media_filters.h"
 #include "participant.h"
 #include "stypes.h"
 
@@ -97,47 +103,55 @@ static struct AVPacket *pop_packet(struct SStream *stream) {
 	return packet;
 }
 
-static void *stream_worker(void *arg) {
-	struct SStream *stream = arg;
-	if (stream->dir == SSTREAM_INPUT) {
-		struct AVFrame *frame = av_frame_alloc();
-		while (true) {
-			struct AVPacket *packet = pop_packet(stream);
-			if (packet == NULL) {  // close requested
-				av_frame_free(&frame);
-				return NULL;
-			}
-			int ret = avcodec_send_packet(stream->codec_ctx, packet);
-			if (ret < 0) {
-				perror("avcodec_send_packet");
-				av_frame_free(&frame);
-				return NULL;
-			}
-			while (ret == 0) {
-				ret = avcodec_receive_frame(stream->codec_ctx, frame);
-				if (ret == AVERROR(EAGAIN))
-					break;
-				else if (ret < 0) {
-					perror("avcodec_receive_packet");
-					break;
-				}
-				stream->media_handler(stream->part_id, frame);
-				frame = av_frame_alloc();
-			}
+static void stream_input_worker(struct SStream *stream) {
+	struct AVFrame *frame = av_frame_alloc();
+	while (true) {
+		struct AVPacket *packet = pop_packet(stream);
+		if (packet == NULL) {  // close requested
+			av_frame_free(&frame);
+			break;
 		}
-	} else {
-		struct AVPacket *packet = av_packet_alloc();
-		while (true) {
-			struct AVFrame *frame = pop_frame(stream);
-			if (frame == NULL) {  // close requested
-				av_packet_free(&packet);
-				return NULL;
+		int ret = avcodec_send_packet(stream->codec_ctx, packet);
+		if (ret < 0) {
+			perror("avcodec_send_packet");
+			av_frame_free(&frame);
+			break;
+		}
+		while (ret == 0) {
+			ret = avcodec_receive_frame(stream->codec_ctx, frame);
+			if (ret == AVERROR(EAGAIN))
+				break;
+			else if (ret < 0) {
+				perror("avcodec_receive_packet");
+				break;
 			}
-			int ret = avcodec_send_frame(stream->codec_ctx, frame);
+			stream->media_handler(stream->part_id, frame);
+			frame = av_frame_alloc();
+		}
+	}
+}
+
+static void stream_output_worker(struct SStream *stream) {
+	struct AVPacket *packet = av_packet_alloc();
+	while (true) {
+		struct AVFrame *frame = pop_frame(stream);
+		if (frame == NULL) {  // close requested
+			av_packet_free(&packet);
+			break;
+		}
+		int ret = mfgraph_send(&stream->filter_graph, stream->codec_ctx, frame);
+		if (ret < 0) {
+			fprintf(stderr, "mgraph_send: err = %d\n", ret);
+			continue;
+		}
+		while ((ret = mfgraph_receive(&stream->filter_graph, frame)) >= 0) {
+			frame->time_base = stream->codec_ctx->time_base;
+			int ret          = avcodec_send_frame(stream->codec_ctx, frame);
 			if (ret < 0) {
 				fprintf(stderr, "avcodec_send_frame: ret = %d\n", ret);
 				av_packet_free(&packet);
-				return NULL;
+				av_frame_free(&frame);
+				return;
 			}
 			while (ret == 0) {
 				ret = avcodec_receive_packet(stream->codec_ctx, packet);
@@ -151,7 +165,18 @@ static void *stream_worker(void *arg) {
 				packet = av_packet_alloc();
 			}
 		}
+		if (ret != AVERROR(EAGAIN))
+			printf("mfgraph_receive: err = %d\n", ret);
 	}
+}
+
+static void *stream_worker(void *arg) {
+	struct SStream *stream = arg;
+	if (stream->dir == SSTREAM_INPUT)
+		stream_input_worker(stream);
+	else
+		stream_output_worker(stream);
+	return NULL;
 }
 
 static void sstream_free(struct SStream **stream) {
@@ -170,6 +195,7 @@ static void sstream_free(struct SStream **stream) {
 	pthread_cond_signal(&(*stream)->cond);
 	pthread_mutex_unlock(&(*stream)->mutex);
 	pthread_join((*stream)->handler_thread, NULL);
+	mfgraph_free(&(*stream)->filter_graph);
 	avcodec_free_context(&(*stream)->codec_ctx);
 	pthread_cond_destroy(&(*stream)->cond);
 	pthread_mutex_destroy(&(*stream)->mutex);
@@ -256,12 +282,28 @@ static sstream_id_t sstream_create(enum SStreamType type, enum SStreamDirection 
 		perror("avcodec_alloc_context3");
 		goto codec_err;
 	}
-
+	if (type == SSTREAM_AUDIO) {
+		stream->codec_ctx->sample_fmt  = SELECON_DEFAULT_AUDIO_SAMPLE_FMT;
+		stream->codec_ctx->sample_rate = SELECON_DEFAULT_AUDIO_SAMPLE_RATE;
+		stream->codec_ctx->frame_size =
+		    av_rescale(SELECON_DEFAULT_AUDIO_FRAME_SIZE, SELECON_DEFAULT_AUDIO_SAMPLE_RATE, 1000);
+		stream->codec_ctx->time_base = av_make_q(1, stream->codec_ctx->sample_rate);
+		av_channel_layout_default(&stream->codec_ctx->ch_layout, 2);
+	}
+	if (avcodec_open2(stream->codec_ctx, codec, NULL) < 0) {
+		perror("avcodec_open2");
+		goto codec_err;
+	}
+	enum SError err = mfgraph_init(&stream->filter_graph, codec->type);
+	if (err != SELECON_OK)
+		goto mfgraph_err;
 	// init handler thread stuff
 	init_recursive_mutex(&stream->mutex);
 	pthread_cond_init(&stream->cond, NULL);
 	pthread_create(&stream->handler_thread, NULL, stream_worker, stream);
 	return stream;
+mfgraph_err:
+	avcodec_free_context(&stream->codec_ctx);
 codec_err:
 	free(stream);
 	return NULL;
@@ -303,21 +345,21 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 	pthread_rwlock_wrlock(&cont->mutex);
 	for (size_t i = 0; i < cont->nb_in; ++i) {
 		if (cont->in[i] == *stream) {
+			sstream_free(stream);
 			if (i + 1 < cont->nb_in)
 				memmove(&cont->in[i], &cont->in[i + 1], cont->nb_in - i - 1);
 			cont->nb_in--;
 			pthread_rwlock_unlock(&cont->mutex);
-			*stream = NULL;
 			return;
 		}
 	}
 	for (size_t i = 0; i < cont->nb_out; ++i) {
 		if (cont->out[i] == *stream) {
+			sstream_free(stream);
 			if (i + 1 < cont->nb_out)
 				memmove(&cont->out[i], &cont->out[i + 1], cont->nb_out - i - 1);
 			cont->nb_out--;
 			pthread_rwlock_unlock(&cont->mutex);
-			*stream = NULL;
 			return;
 		}
 	}

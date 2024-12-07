@@ -22,7 +22,7 @@ enable_testing()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(libav REQUIRED IMPORTED_TARGET
     #libavdevice
-    #libavfilter
+    libavfilter
     libavformat
     libavcodec
     libswresample
@@ -36,7 +36,7 @@ file(GLOB TEST_SOURCES src/tests/*.cpp)
 
 add_library(selecon ${SELECON_LIB_SOURCES})
 target_include_directories(selecon INTERFACE src/selecon)
-target_link_libraries(selecon PUBLIC avutil avformat avcodec)
+target_link_libraries(selecon PUBLIC avutil avformat avcodec avfilter)
 
 add_executable(selecon_cli ${CLI_SOURCES})
 target_link_libraries(selecon_cli selecon)

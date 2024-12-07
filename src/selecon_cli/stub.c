@@ -6,9 +6,11 @@
 #include <libavcodec/packet.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
+#include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/rational.h>
+#include <libavutil/samplefmt.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,11 +90,13 @@ static void stub_read_file(struct Stub* stub,
 				goto free_frames;
 			}
 			ts_delta += frame->pkt_duration;
-			enum SError err = selecon_stream_push_frame(stub->context, stream_id, frame);
+			frame->time_base = codecCtx->time_base;
+			enum SError err  = selecon_stream_push_frame(stub->context, stream_id, frame);
 			if (err != SELECON_OK) {
 				perror("selecon_stream_push_frame");
 				goto free_frames;
 			}
+			frame = av_frame_alloc();
 		}
 		av_packet_unref(packet);
 		// realtime delay emulation
