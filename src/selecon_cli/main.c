@@ -18,10 +18,10 @@ static const char* help_message =
     "\n"
     "OPTIONS:\n"
     "  -h|--help              show this message\n"
-    "  --version              print version and exit\n"
     "  -l|--listen-on address current participant address (default "
-    "0.0.0.0:" SELECON_DEFAULT_LISTEN_PORT_STR
-    ")\n"
+    "0.0.0.0:" SELECON_DEFAULT_LISTEN_PORT_STR ")\n"
+    "  -u|--user username     set user name\n"
+    "  --version              print version and exit\n"
     //    "  -f|--file filename     stream given video filename in a loop\n"
     "\n"
     "DESCRIPTION:\n"
@@ -30,6 +30,7 @@ static const char* help_message =
     "  in format file://<os-path-to-socket>.\n";
 
 static const char* participant_address = NULL;
+static const char* username            = NULL;
 static struct SContext* context        = NULL;
 static struct Stub* stub               = NULL;
 
@@ -37,7 +38,81 @@ static struct PacketDump* self_dumper = NULL;
 
 static void media_handler(part_id_t part_id, struct AVFrame* frame) {
 	printf("media frame recvd from part %llu\n", part_id);
-	av_frame_free(&frame);
+	av_frame_unref(&frame);
+}
+
+static void process_help_cmd(char* cmd) {
+  char* subcmd = strchr(cmd, ' ');
+  if (subcmd == NULL) {
+    printf(
+      "list of available commands:\n"
+      "  dump    print info about current selecon context state\n"
+      "  exit    end active conference and close cli tool\n"
+      "  help    show this message\n"
+      "  invite  send invitation for joining active conference to other client\n"
+      "  leave   exit conference without exiting cli tool\n"
+      "  quit    same as exit\n"
+      "  stub    set stub media file for playing in conference\n"
+      "\n"
+    );
+  } else {
+    subcmd++;
+    if (strcmp(subcmd, "dump") == 0) {
+      printf(
+        "  > dump\n"
+        "\n"
+        "  Shows state of active selecon context\n"
+        "\n"
+      );
+    } else if (strcmp(subcmd, "exit") == 0) {
+      printf(
+        "  > exit\n"
+        "\n"
+        "  Exit current conference and cli tool\n"
+        "\n"
+      );
+    } else if (strcmp(subcmd, "help") == 0) {
+      printf(
+        "  > help [{command}]\n"
+        "\n"
+        "  List available commands or show help about specific command\n"
+        "\n"
+      );
+    } else if (strcmp(subcmd, "invite") == 0) {
+      printf(
+        "  > invite {ip}\n"
+        "  > invite {ip}:{port}\n"
+        "  > invite file://{socket-path}\n"
+        "\n"
+        "  Send invitation to other client\n"
+        "\n"
+      );
+    } else if (strcmp(subcmd, "leave") == 0) {
+      printf(
+        "  > leave\n"
+        "\n"
+        "  Leave current conference without closing cli tool\n"
+        "\n"
+      );
+    } else if (strcmp(subcmd, "quit") == 0) {
+      printf(
+        "  > quit\n"
+        "\n"
+        "  Exit current conference and cli tool\n"
+        "\n"
+      );
+    } else if (strcmp(subcmd, "stub") == 0) {
+      printf(
+        "  > stub {media-file}\n"
+        "  > stub off\n"
+        "\n"
+        "  Set media file as stub audio/video for showing in conference\n"
+        "\n"
+      );
+    } else {
+      printf("unknown command '%s'\n", subcmd);
+    }
+  }
 }
 
 static int process_invite_cmd(char* cmd) {
@@ -93,9 +168,16 @@ static int cmd_loop(void) {
 	context         = selecon_context_alloc();
 	enum SError err = selecon_context_init2(context, participant_address, NULL, media_handler);
 	if (err != SELECON_OK) {
-		printf("failed to initialize context: err = %s", serror_str(err));
+		printf("failed to initialize context: err = %s\n", serror_str(err));
 		return -1;
 	}
+  if (username != NULL) {
+    err = selecon_set_username(context, username);
+    if (err != SELECON_OK) {
+      printf("failed to set username: err = %s\n", serror_str(err));
+      return -1;
+    }
+  }
 	int ret = 0;
 	char cmd[1024];
 	while (true) {
@@ -107,6 +189,8 @@ static int cmd_loop(void) {
 			*newline = '\0';
 		if (STARTS_WITH(cmd, "exit") || STARTS_WITH(cmd, "quit")) {
 			break;
+    } else if (STARTS_WITH(cmd, "help") || STARTS_WITH(cmd, "?")) {
+      process_help_cmd(cmd);
 		} else if (STARTS_WITH(cmd, "dump")) {
 			if ((ret = process_dump_cmd(cmd)))
 				break;
@@ -135,13 +219,15 @@ int main(int argc, char** argv) {
 			return 0;
 		} else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--listen-on") == 0) {
 			participant_address = argv[++i];
+    } else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--user") == 0) {
+      username = argv[++i];
 		} else {
 			printf("unknown option: %s\n", argv[i]);
 			return -1;
 		}
 	}
 	// init self dumper
-	self_dumper = pdump_create("self.mp4", 1);
+	self_dumper = pdump_create("self.webm");
 	int ret     = cmd_loop();
 	pdump_free(&self_dumper);
 	return ret;

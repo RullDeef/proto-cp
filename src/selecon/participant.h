@@ -29,6 +29,8 @@ struct SParticipant spart_init(const char* name);
 // frees allocated resources
 void spart_destroy(struct SParticipant* par);
 
+void spart_rename(struct SParticipant *part, const char* new_name);
+
 void spart_dump(FILE* fd, struct SParticipant* par);
 
 #ifdef __cplusplus

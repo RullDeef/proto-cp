@@ -40,6 +40,8 @@ enum SError selecon_context_init2(struct SContext *context,
                                   invite_handler_fn_t invite_handler,
                                   media_handler_fn_t media_handler);
 
+enum SError selecon_set_username(struct SContext *context, const char* username);
+
 // print current context state for debugging
 void selecon_context_dump(FILE *fd, struct SContext *context);
 

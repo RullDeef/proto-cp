@@ -30,6 +30,11 @@ void spart_destroy(struct SParticipant* par) {
 	}
 }
 
+void spart_rename(struct SParticipant *part, const char* new_name) {
+  free(part->name);
+  part->name = strdup(new_name);
+}
+
 void spart_dump(FILE* fd, struct SParticipant* par) {
 	if (par == NULL)
 		fprintf(fd, "(null)");

@@ -287,6 +287,15 @@ enum SError selecon_context_init2(struct SContext *context,
 	return err;
 }
 
+enum SError selecon_set_username(struct SContext *context, const char* username) {
+  if (username == NULL)
+    return SELECON_INVALID_ARG;
+  if (!context->initialized)
+    return SELECON_EMPTY_CONTEXT;
+  spart_rename(&context->self, username);
+  return SELECON_OK;
+}
+
 void selecon_context_dump(FILE *fd, struct SContext *context) {
 	if (context == NULL) {
 		fprintf(fd, "(null)");
