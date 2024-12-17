@@ -1,14 +1,18 @@
 #/bin/env sh
 
-function user_ip() {
-  echo "192.168.200.$1"
-}
+# test peer to peer conference using unix socket files
 
-# test peer to peer conference using docker containers
-docker compose build
+CLI=./build/selecon_cli
 
-docker compose down
+cat <<EOF | ${CLI} --listen-on file://user1.sock --user user1 &
+dump
+EOF
 
-docker compose run user1 --invite ${user_ip 2} &
-docker compose run user2 --wait-invite &
+sleep 1
 
+cat <<EOF | ${CLI} --listen-on file://user2.sock --user user2
+dump
+invite file://user1.sock
+EOF
+
+rm user1.sock user2.sock
