@@ -95,6 +95,9 @@ sstream_id_t scont_alloc_stream(struct SStreamContainer *cont,
 
 void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream);
 
+// usable when participant disconnects
+void scont_close_streams(struct SStreamContainer *cont, part_id_t part_id);
+
 bool scont_has_stream(struct SStreamContainer *cont, sstream_id_t stream);
 
 bool scont_stream_closed(struct SStreamContainer *cont, sstream_id_t stream);

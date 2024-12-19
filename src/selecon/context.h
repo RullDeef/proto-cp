@@ -22,8 +22,8 @@ struct SContext {
 	// number of elements in participants array plus one (self)
 	size_t nb_participants;
 
-	// mutex for exclusive access to participants array
-	pthread_mutex_t part_mutex;
+	// read write lock for access to participants array
+	pthread_rwlock_t part_rwlock;
 
 	// connection for self is NULL
 	struct SParticipant self;

@@ -17,6 +17,7 @@
 
 #include "avutility.h"
 #include "config.h"
+#include "debugging.h"
 #include "error.h"
 #include "media_filters.h"
 #include "participant.h"
@@ -137,24 +138,18 @@ static void stream_input_worker(struct SStream *stream) {
 
 static void stream_output_worker(struct SStream *stream) {
 	struct AVPacket *packet = av_packet_alloc();
-  FILE *fp_in = fopen("raw_in.raw", "wb");
-  FILE *fp_out = fopen("raw_out.raw", "wb");
 	while (true) {
 		struct AVFrame *frame = pop_frame(stream);
 		if (frame == NULL) {  // close requested
 			av_packet_free(&packet);
 			break;
 		}
-    // dump input frame (first channel only)
-    fwrite(frame->data[0], av_samples_get_buffer_size(NULL, 1, frame->nb_samples, frame->format, 1), 1, fp_in);
 		int ret = mfgraph_send(&stream->filter_graph, stream->codec_ctx, frame);
 		if (ret < 0) {
 			fprintf(stderr, "mgraph_send: err = %d\n", ret);
 			continue;
 		}
 		while ((ret = mfgraph_receive(&stream->filter_graph, frame)) >= 0) {
-      // dump output frame (interleaved - ok)
-      fwrite(frame->data[0], av_samples_get_buffer_size(NULL, 2, frame->nb_samples, frame->format, 1), 1, fp_out);
 			frame->time_base = stream->codec_ctx->time_base;
 			int ret          = avcodec_send_frame(stream->codec_ctx, frame);
 			if (ret < 0) {
@@ -178,8 +173,6 @@ static void stream_output_worker(struct SStream *stream) {
 		if (ret != AVERROR(EAGAIN))
 			printf("mfgraph_receive: err = %d\n", ret);
 	}
-  fclose(fp_in);
-  fclose(fp_out);
 }
 
 static void *stream_worker(void *arg) {
@@ -192,6 +185,7 @@ static void *stream_worker(void *arg) {
 }
 
 static void sstream_free(struct SStream **stream) {
+  TRACE_CALL;
 	if (*stream == NULL)
 		return;
 	// clear queue
@@ -203,9 +197,11 @@ static void sstream_free(struct SStream **stream) {
 		free((*stream)->queue);
 		(*stream)->queue = next;
 	}
-	// wakeup worker thread
-	pthread_cond_signal(&(*stream)->cond);
 	pthread_mutex_unlock(&(*stream)->mutex);
+	// wakeup worker thread
+  TRACE_CALL;
+	pthread_cond_signal(&(*stream)->cond);
+  TRACE_CALL;
 	pthread_join((*stream)->handler_thread, NULL);
 	mfgraph_free(&(*stream)->filter_graph);
 	avcodec_free_context(&(*stream)->codec_ctx);
@@ -374,7 +370,7 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 		if (cont->in[i] == *stream) {
 			sstream_free(stream);
 			if (i + 1 < cont->nb_in)
-				memmove(&cont->in[i], &cont->in[i + 1], cont->nb_in - i - 1);
+				memmove(&cont->in[i], &cont->in[i + 1], (cont->nb_in - i - 1) * sizeof(struct SStream*));
 			cont->nb_in--;
 			pthread_rwlock_unlock(&cont->mutex);
 			return;
@@ -384,7 +380,7 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 		if (cont->out[i] == *stream) {
 			sstream_free(stream);
 			if (i + 1 < cont->nb_out)
-				memmove(&cont->out[i], &cont->out[i + 1], cont->nb_out - i - 1);
+				memmove(&cont->out[i], &cont->out[i + 1], (cont->nb_out - i - 1) * sizeof(struct SStream*));
 			cont->nb_out--;
 			pthread_rwlock_unlock(&cont->mutex);
 			return;
@@ -392,6 +388,34 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 	}
 	pthread_rwlock_unlock(&cont->mutex);
 	fprintf(stderr, "scont_close_stream - invalid stream id\n");
+}
+
+void scont_close_streams(struct SStreamContainer *cont, part_id_t part_id) {
+  TRACE_CALL;
+  pthread_rwlock_wrlock(&cont->mutex);
+  TRACE_CALL;
+	for (size_t i = 0; i < cont->nb_in; ++i) {
+		if (cont->in[i]->part_id == part_id) {
+      TRACE_CALL;
+			sstream_free(&cont->in[i]);
+      TRACE_CALL;
+			if (i + 1 < cont->nb_in)
+				memmove(&cont->in[i], &cont->in[i + 1], (cont->nb_in - i - 1) * sizeof(struct SStream*));
+			cont->nb_in--;
+      --i;
+		}
+	}
+	for (size_t i = 0; i < cont->nb_out; ++i) {
+		if (cont->out[i]->part_id == part_id) {
+			sstream_free(&cont->out[i]);
+			if (i + 1 < cont->nb_out)
+				memmove(&cont->out[i], &cont->out[i + 1], (cont->nb_out - i - 1) * sizeof(struct SStream*));
+			cont->nb_out--;
+      --i;
+		}
+	}
+	pthread_rwlock_unlock(&cont->mutex);
+  TRACE_CALL;
 }
 
 bool scont_has_stream(struct SStreamContainer *cont, sstream_id_t stream) {

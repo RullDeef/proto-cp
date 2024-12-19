@@ -20,6 +20,14 @@ struct PacketDump {
   //struct AVStream* video_stream;
 };
 
+struct PacketDumpMap {
+  struct PacketDump **pdumps;
+  part_id_t *ids;
+
+  const char* filename_base;
+  size_t count;
+};
+
 static struct AVStream* create_audio_stream(struct AVFormatContext* fmt_ctx, struct AVCodecContext **codec_ctx) {
   struct AVStream* stream = avformat_new_stream(fmt_ctx, NULL);
   assert(stream != NULL);
@@ -51,7 +59,7 @@ static struct AVStream* create_audio_stream(struct AVFormatContext* fmt_ctx, str
   return stream;
 }
 
-struct PacketDump* pdump_create(const char* filename) {
+static struct PacketDump* pdump_create(const char* filename) {
 	struct PacketDump* pdump = calloc(1, sizeof(struct PacketDump));
 
 	avformat_alloc_output_context2(&pdump->fmt_ctx, NULL, NULL, filename);
@@ -68,7 +76,6 @@ struct PacketDump* pdump_create(const char* filename) {
 			assert(0);
 		}
 	}
-  av_dump_format(pdump->fmt_ctx, 0, filename, 1);
 	int ret = avformat_write_header(pdump->fmt_ctx, NULL);
 	assert(ret >= 0);
 	return pdump;
@@ -95,7 +102,7 @@ static void pdump_dump_audio(struct PacketDump *pdump, struct AVFrame *frame) {
 	av_packet_unref(packet);
 }
 
-void pdump_free(struct PacketDump** pdump) {
+static void pdump_free(struct PacketDump** pdump) {
 	if (*pdump != NULL) {
     pdump_dump_audio(*pdump, NULL); // flush
 		int ret = av_write_trailer((*pdump)->fmt_ctx);
@@ -107,9 +114,47 @@ void pdump_free(struct PacketDump** pdump) {
 	}
 }
 
-void pdump_dump(struct PacketDump* pdump, enum AVMediaType mtype, struct AVFrame* frame) {
+static void pdump_dump(struct PacketDump* pdump, enum AVMediaType mtype, struct AVFrame* frame) {
   if (mtype == AVMEDIA_TYPE_AUDIO)
     pdump_dump_audio(pdump, frame);
   else
     assert(0);
+}
+
+// packet dump map api ------
+
+struct PacketDumpMap* pdmap_create(const char* filename_base) {
+  struct PacketDumpMap* pdmap = calloc(1, sizeof(struct PacketDumpMap));
+  if (pdmap == NULL) {
+    perror("calloc");
+    return NULL;
+  }
+  pdmap->filename_base = filename_base;
+  return pdmap;
+}
+
+void pdmap_free(struct PacketDumpMap** pdmap) {
+  if ((*pdmap)->count == 0)
+    return;
+  for (size_t i = 0; i < (*pdmap)->count; ++i)
+    pdump_free(&(*pdmap)->pdumps[i]);
+  free((*pdmap)->pdumps);
+  free((*pdmap)->ids);
+  free(*pdmap);
+  *pdmap = NULL;
+}
+
+void pdmap_dump(struct PacketDumpMap* pdmap, part_id_t part_id, enum AVMediaType mtype, struct AVFrame* frame) {
+  for (size_t i = 0; i < pdmap->count; ++i)
+    if (pdmap->ids[i] == part_id)
+      return pdump_dump(pdmap->pdumps[i], mtype, frame);
+  // dumper not found - create new one
+  pdmap->count++;
+  pdmap->ids = reallocarray(pdmap->ids, pdmap->count, sizeof(part_id_t));
+  pdmap->pdumps = reallocarray(pdmap->pdumps, pdmap->count, sizeof(struct PacketDump));
+  pdmap->ids[pdmap->count - 1] = part_id;
+  char filename[256];
+  snprintf(filename, sizeof(filename), "%s_%llu.mkv", pdmap->filename_base, part_id);
+  pdmap->pdumps[pdmap->count - 1] = pdump_create(filename);
+  pdump_dump(pdmap->pdumps[pdmap->count - 1], mtype, frame);
 }

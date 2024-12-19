@@ -34,15 +34,10 @@ static const char* username            = NULL;
 static struct SContext* context        = NULL;
 static struct Stub* stub               = NULL;
 
-static struct PacketDump* self_dumper = NULL;
-
-FILE* fp_self = NULL;
+static struct PacketDumpMap* dump_mapper = NULL;
 
 static void media_handler(void *user_data, part_id_t part_id, struct AVFrame *frame) {
-	printf("media frame recvd from part %llu\n", part_id);
-  fwrite(frame->data[0], av_samples_get_buffer_size(NULL, 1, frame->nb_samples, frame->format, 1), 1, fp_self);
-  pdump_dump(self_dumper, AVMEDIA_TYPE_AUDIO, frame);
-  //av_frame_unref(frame);
+  pdmap_dump(dump_mapper, part_id, AVMEDIA_TYPE_AUDIO, frame);
 }
 
 static void process_help_cmd(char* cmd) {
@@ -255,11 +250,9 @@ int main(int argc, char** argv) {
 			return -1;
 		}
 	}
-  fp_self = fopen("self_raw.raw", "wb");
 	// init self dumper
-	self_dumper = pdump_create("self.mkv");
+	dump_mapper = pdmap_create("dumps/");
 	int ret     = cmd_loop();
-	pdump_free(&self_dumper);
-  fclose(fp_self);
+	pdmap_free(&dump_mapper);
 	return ret;
 }
