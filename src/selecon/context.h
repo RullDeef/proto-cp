@@ -38,5 +38,4 @@ struct SContext {
 	bool conf_thread_working;
 
 	struct SStreamContainer streams;
-	media_handler_fn_t media_handler;
 };

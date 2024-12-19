@@ -157,7 +157,7 @@ int mfgraph_receive(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
 	}
 
 	// Read samples from the FIFO into the provided frame (to fill it adequately)
-	ret = av_audio_fifo_read(mf_graph->audio_fifo, (void **)frame->data, frame->nb_samples);
+	ret = av_audio_fifo_read(mf_graph->audio_fifo, (void **)frame->data, mf_graph->audio_frame_size);
 	if (ret < 0) {
 		perror("Error reading from audio FIFO");
 		return ret;  // Return the error

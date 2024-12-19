@@ -35,7 +35,10 @@ typedef bool (*invite_handler_fn_t)(struct SMsgInvite *invite);
 
 // recvd media data handling callback. Must initiate
 // defered work and quit as soon as possible
-typedef void (*media_handler_fn_t)(part_id_t part_id, struct AVFrame *frame);
+typedef void (*media_handler_fn_t)(void *user_data, part_id_t part_id, struct AVFrame *frame);
+
+struct AVPacket;
+typedef void (*packet_handler_fn_t)(void *user_data, struct SStream *stream, struct AVPacket *packet);
 
 #ifdef __cplusplus
 }  // extern "C"

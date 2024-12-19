@@ -154,10 +154,20 @@ static void handle_message(struct SContext *ctx, size_t part_index, struct SMess
 	}
 }
 
-static void packet_handler(part_id_t part_id, struct AVPacket *packet) {
-	printf("received packet in handler!\n");
-	av_packet_free(&packet);
-	return;
+// received packet from self output stream
+static void packet_handler(void *ctx_raw, struct SStream *stream, struct AVPacket *packet) {
+  struct SContext* ctx = ctx_raw;
+  // TODO: do packet routing to other participants
+  // for now - route back into debug self input stream
+  sstream_id_t input_stream = scont_find_stream(&ctx->streams, stream->part_id, stream->type, SSTREAM_INPUT);
+  if (input_stream != NULL) {
+    enum SError err = scont_push_packet(&ctx->streams, input_stream, packet);
+    if (err != SELECON_OK)
+      printf("failed to push packet: err = %s\n", serror_str(err));
+  } else {
+    printf("self debug input stream not found\n");
+  	av_packet_unref(packet);
+  }
 }
 
 static void *conf_worker(void *arg) {
@@ -222,6 +232,9 @@ static void *invite_worker(void *arg) {
 					ctx->conf_id = invite->conf_id;
 				}
 				add_participant(ctx, invite->part_id, invite->part_name, part_con);
+        sstream_id_t audio_stream = scont_alloc_stream(&ctx->streams, invite->part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
+        sstream_id_t video_stream = scont_alloc_stream(&ctx->streams, invite->part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
+        // TODO: memory check
 				if (ctx->nb_participants == 2 && !ctx->conf_thread_working)
 					pthread_create(&ctx->conf_thread, NULL, conf_worker, ctx);
 				message_free((struct SMessage **)&invite);
@@ -256,7 +269,6 @@ enum SError selecon_context_init(struct SContext *ctx,
 	init_recursive_mutex(&ctx->part_mutex);
 	ctx->listen_ep           = *ep;
 	ctx->invite_handler      = invite_handler == NULL ? selecon_accept_any : invite_handler;
-	ctx->media_handler       = media_handler;
 	ctx->initialized         = true;
 	ctx->conf_thread_working = false;
 	if (pthread_create(&ctx->listener_thread, NULL, invite_worker, ctx) != 0) {
@@ -270,7 +282,7 @@ enum SError selecon_context_init(struct SContext *ctx,
 	selecon_endpoint_dump(stdout, ep);
 	printf("]\n");
 #endif
-	scont_init(&ctx->streams, media_handler, packet_handler);
+	scont_init(&ctx->streams, media_handler, packet_handler, ctx);
 	return SELECON_OK;
 }
 
@@ -332,6 +344,12 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
+  // create input streams for recving content from new participant
+  sstream_id_t audio_stream = scont_alloc_stream(&context->streams, -1, SSTREAM_AUDIO, SSTREAM_INPUT);
+  sstream_id_t video_stream = scont_alloc_stream(&context->streams, -1, SSTREAM_VIDEO, SSTREAM_INPUT);
+  if (audio_stream == NULL || video_stream == NULL) {
+    return SELECON_MEMORY_ERROR;
+  }
 	struct SConnection *con = NULL;
 	enum SError err         = sconn_connect(&con, ep);
 	if (err != SELECON_OK)
@@ -357,6 +375,8 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 	}
 	add_participant(context, acceptMsg->id, acceptMsg->name, con);
 	pthread_mutex_unlock(&context->part_mutex);
+  audio_stream->part_id = acceptMsg->id;
+  video_stream->part_id = acceptMsg->id;
 	message_free((struct SMessage **)&msg);
 	message_free((struct SMessage **)&acceptMsg);
 	if (context->nb_participants == 2 && !context->conf_thread_working) {
@@ -403,8 +423,17 @@ enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *s
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
-	*stream_id =
+  // TODO: remove this debug self input stream
+  sstream_id_t debug_input_stream =
+    scont_alloc_stream(&context->streams, context->self.id, SSTREAM_AUDIO, SSTREAM_INPUT);
+  if (debug_input_stream == NULL)
+    return SELECON_MEMORY_ERROR;
+  *stream_id =
 	    scont_alloc_stream(&context->streams, context->self.id, SSTREAM_AUDIO, SSTREAM_OUTPUT);
+  if (*stream_id == NULL) {
+    scont_close_stream(&context->streams, &debug_input_stream);
+    return SELECON_MEMORY_ERROR;
+  }
 	return SELECON_OK;
 }
 

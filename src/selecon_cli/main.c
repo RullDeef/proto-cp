@@ -22,7 +22,7 @@ static const char* help_message =
     "0.0.0.0:" SELECON_DEFAULT_LISTEN_PORT_STR ")\n"
     "  -u|--user username     set user name\n"
     "  --version              print version and exit\n"
-    //    "  -f|--file filename     stream given video filename in a loop\n"
+    "  --stub filename        stream given media file in a loop\n"
     "\n"
     "DESCRIPTION:\n"
     "  Address can be IPv4/IPv6 (eg: 192.168.100.1:" SELECON_DEFAULT_LISTEN_PORT_STR
@@ -36,9 +36,13 @@ static struct Stub* stub               = NULL;
 
 static struct PacketDump* self_dumper = NULL;
 
-static void media_handler(part_id_t part_id, struct AVFrame* frame) {
+FILE* fp_self = NULL;
+
+static void media_handler(void *user_data, part_id_t part_id, struct AVFrame *frame) {
 	printf("media frame recvd from part %llu\n", part_id);
-	av_frame_unref(&frame);
+  fwrite(frame->data[0], av_samples_get_buffer_size(NULL, 1, frame->nb_samples, frame->format, 1), 1, fp_self);
+  pdump_dump(self_dumper, AVMEDIA_TYPE_AUDIO, frame);
+  //av_frame_unref(frame);
 }
 
 static void process_help_cmd(char* cmd) {
@@ -52,6 +56,7 @@ static void process_help_cmd(char* cmd) {
       "  invite  send invitation for joining active conference to other client\n"
       "  leave   exit conference without exiting cli tool\n"
       "  quit    same as exit\n"
+      "  sleep   sleep\n"
       "  stub    set stub media file for playing in conference\n"
       "\n"
     );
@@ -101,6 +106,13 @@ static void process_help_cmd(char* cmd) {
         "  Exit current conference and cli tool\n"
         "\n"
       );
+    } else if (strcmp(subcmd, "sleep") == 0) {
+      printf(
+        "  > sleep {seconds}\n"
+        "\n"
+        "  Sleep given amount of seconds\n"
+        "\n"
+      );
     } else if (strcmp(subcmd, "stub") == 0) {
       printf(
         "  > stub {media-file}\n"
@@ -143,24 +155,36 @@ static int process_dump_cmd(char* cmd) {
 	return 0;
 }
 
+static int process_sleep_cmd(char* cmd) {
+  char* seconds_str = strchr(cmd, ' ');
+  if (seconds_str == NULL) {
+    printf("usage: sleep {seconds}\n");
+    return 0;
+  }
+  ++seconds_str;
+  int seconds = atoi(seconds_str);
+  sleep(seconds);
+  return 0;
+}
+
+static void update_stub(char* option) {
+  if (strcmp(option, "off") == 0)
+		stub_close(&stub);
+	else if (access(option, F_OK) != 0)
+		printf("failed to access file %s\n", option);
+	else {
+    printf("loading file \"%s\"\n", option);
+    stub_close(&stub);
+    stub = stub_create_dynamic(context, option);
+  }
+}
+
 static int process_stub_cmd(char* cmd) {
 	char* media_file = strchr(cmd, ' ');
-	if (media_file == NULL) {
+	if (media_file == NULL)
 		printf("usage: stub <media_file>\n   or: stub off\n");
-		return 0;
-	}
-	++media_file;
-	if (strcmp(media_file, "off") == 0) {
-		stub_close(&stub);
-		return 0;
-	}
-	if (access(media_file, F_OK) != 0) {
-		printf("failed to access file %s\n", media_file);
-		return 0;
-	}
-	printf("loading file \"%s\"\n", media_file);
-	stub_close(&stub);
-	stub = stub_create_dynamic(context, media_file);
+  else
+    update_stub(++media_file);
 	return 0;
 }
 
@@ -200,6 +224,9 @@ static int cmd_loop(void) {
 		} else if (STARTS_WITH(cmd, "leave")) {
 			if ((ret = process_leave_cmd(cmd)))
 				break;
+    } else if (STARTS_WITH(cmd, "sleep")) {
+      if ((ret = process_sleep_cmd(cmd)))
+        break;
 		} else if (STARTS_WITH(cmd, "stub")) {
 			if ((ret = process_stub_cmd(cmd)))
 				break;
@@ -221,14 +248,18 @@ int main(int argc, char** argv) {
 			participant_address = argv[++i];
     } else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--user") == 0) {
       username = argv[++i];
+    } else if (strcmp(argv[i], "--stub") == 0) {
+      update_stub(argv[++i]);
 		} else {
 			printf("unknown option: %s\n", argv[i]);
 			return -1;
 		}
 	}
+  fp_self = fopen("self_raw.raw", "wb");
 	// init self dumper
-	self_dumper = pdump_create("self.webm");
+	self_dumper = pdump_create("self.mkv");
 	int ret     = cmd_loop();
 	pdump_free(&self_dumper);
+  fclose(fp_self);
 	return ret;
 }
