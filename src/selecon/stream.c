@@ -47,25 +47,25 @@ static void insert_common(struct SStream *stream, struct SFrame *sframe) {
 static void insert_frame(struct SStream *stream, struct AVFrame *frame) {
 	assert(stream->dir == SSTREAM_OUTPUT);
 	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
-  if (sframe == NULL) {
-    fprintf(stderr, "failed to allocate SFrame in insert_frame\n");
-    av_frame_unref(frame);
-  } else {
-    sframe->avframe = frame;
-    insert_common(stream, sframe);
-  }
+	if (sframe == NULL) {
+		fprintf(stderr, "failed to allocate SFrame in insert_frame\n");
+		av_frame_unref(frame);
+	} else {
+		sframe->avframe = frame;
+		insert_common(stream, sframe);
+	}
 }
 
 static void insert_packet(struct SStream *stream, struct AVPacket *packet) {
 	assert(stream->dir == SSTREAM_INPUT);
 	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
-  if (sframe == NULL) {
-    fprintf(stderr, "failed to allocate SFrame in insert_packet\n");
-    av_packet_unref(packet);
-  } else {
-    sframe->avpacket = packet;
-    insert_common(stream, sframe);
-  }
+	if (sframe == NULL) {
+		fprintf(stderr, "failed to allocate SFrame in insert_packet\n");
+		av_packet_unref(packet);
+	} else {
+		sframe->avpacket = packet;
+		insert_common(stream, sframe);
+	}
 }
 
 static struct AVFrame *pop_frame(struct SStream *stream) {
@@ -109,9 +109,10 @@ static struct AVPacket *pop_packet(struct SStream *stream) {
 }
 
 static void stream_input_worker(struct SStream *stream) {
-  int64_t pts = 0;
+	int64_t pts           = 0;
 	struct AVFrame *frame = av_frame_alloc();
-  enum AVMediaType mtype = stream->type == SSTREAM_AUDIO ? AVMEDIA_TYPE_AUDIO : AVMEDIA_TYPE_VIDEO;
+	enum AVMediaType mtype =
+	    stream->type == SSTREAM_AUDIO ? AVMEDIA_TYPE_AUDIO : AVMEDIA_TYPE_VIDEO;
 	while (true) {
 		struct AVPacket *packet = pop_packet(stream);
 		if (packet == NULL) {  // close requested
@@ -132,11 +133,11 @@ static void stream_input_worker(struct SStream *stream) {
 				perror("avcodec_receive_packet");
 				break;
 			}
-      frame->time_base = stream->codec_ctx->time_base;
-      if (mtype == AVMEDIA_TYPE_AUDIO) {
-        frame->pts = frame->pkt_dts = pts;
-        pts += frame->nb_samples; // time is in 1/sample_rate units
-      }
+			frame->time_base = stream->codec_ctx->time_base;
+			if (mtype == AVMEDIA_TYPE_AUDIO) {
+				frame->pts = frame->pkt_dts = pts;
+				pts += frame->nb_samples;  // time is in 1/sample_rate units
+			}
 			stream->media_handler(stream->media_user_data, stream->part_id, mtype, frame);
 			frame = av_frame_alloc();
 		}
@@ -157,9 +158,7 @@ static void stream_output_worker(struct SStream *stream) {
 			continue;
 		}
 		while ((ret = mfgraph_receive(&stream->filter_graph, frame)) >= 0) {
-      fprintf(stderr, "MGRAPH RECV:\n");
-      av_frame_dump(stderr, frame);
-			int ret          = avcodec_send_frame(stream->codec_ctx, frame);
+			int ret = avcodec_send_frame(stream->codec_ctx, frame);
 			if (ret < 0) {
 				fprintf(stderr, "avcodec_send_frame: ret = %d\n", ret);
 				av_packet_free(&packet);
@@ -205,7 +204,7 @@ static void sstream_free(struct SStream **stream) {
 		(*stream)->queue = next;
 	}
 	pthread_mutex_unlock(&(*stream)->mutex);
-	pthread_cond_signal(&(*stream)->cond); // wakeup worker thread
+	pthread_cond_signal(&(*stream)->cond);  // wakeup worker thread
 	pthread_join((*stream)->handler_thread, NULL);
 	mfgraph_free(&(*stream)->filter_graph);
 	avcodec_free_context(&(*stream)->codec_ctx);
@@ -242,7 +241,7 @@ void scont_init(struct SStreamContainer *cont,
 	pthread_rwlock_init(&cont->mutex, NULL);
 	cont->media_handler  = media_handler;
 	cont->packet_handler = packet_handler;
-  cont->user_data = user_data;
+	cont->user_data      = user_data;
 }
 
 void scont_free(struct SStreamContainer *cont) {
@@ -275,7 +274,9 @@ void scont_dump(FILE *fp, struct SStreamContainer *cont) {
 	pthread_rwlock_unlock(&cont->mutex);
 }
 
-static sstream_id_t sstream_create(struct SStreamContainer *cont, enum SStreamType type, enum SStreamDirection dir) {
+static sstream_id_t sstream_create(struct SStreamContainer *cont,
+                                   enum SStreamType type,
+                                   enum SStreamDirection dir) {
 	struct SStream *stream = calloc(1, sizeof(struct SStream));
 	if (stream == NULL)
 		return stream;
@@ -299,32 +300,32 @@ static sstream_id_t sstream_create(struct SStreamContainer *cont, enum SStreamTy
 	if (type == SSTREAM_AUDIO) {
 		stream->codec_ctx->sample_fmt  = SELECON_DEFAULT_AUDIO_SAMPLE_FMT;
 		stream->codec_ctx->sample_rate = SELECON_DEFAULT_AUDIO_SAMPLE_RATE;
-		stream->codec_ctx->frame_size = SELECON_DEFAULT_AUDIO_FRAME_SIZE;
+		stream->codec_ctx->frame_size  = SELECON_DEFAULT_AUDIO_FRAME_SIZE;
 		av_channel_layout_default(&stream->codec_ctx->ch_layout, SELECON_DEFAULT_AUDIO_CHANNELS);
-	} else { // video
-    stream->codec_ctx->pix_fmt = SELECON_DEFAULT_VIDEO_PIXEL_FMT;
-    stream->codec_ctx->framerate = av_make_q(1, SELECON_DEFAULT_VIDEO_FPS);
-    stream->codec_ctx->width = SELECON_DEFAULT_VIDEO_WIDTH;
-    stream->codec_ctx->height = SELECON_DEFAULT_VIDEO_HEIGHT;
-    stream->codec_ctx->sample_aspect_ratio = av_make_q(1, 1);
-  }
-  stream->codec_ctx->time_base = av_make_q(1, 1000);
-  if (dir == SSTREAM_INPUT)
-    stream->codec_ctx->pkt_timebase = av_make_q(1, 1000);
+	} else {  // video
+		stream->codec_ctx->pix_fmt             = SELECON_DEFAULT_VIDEO_PIXEL_FMT;
+		stream->codec_ctx->framerate           = av_make_q(1, SELECON_DEFAULT_VIDEO_FPS);
+		stream->codec_ctx->width               = SELECON_DEFAULT_VIDEO_WIDTH;
+		stream->codec_ctx->height              = SELECON_DEFAULT_VIDEO_HEIGHT;
+		stream->codec_ctx->sample_aspect_ratio = av_make_q(1, 1);
+	}
+	stream->codec_ctx->time_base = av_make_q(1, 1000);
+	if (dir == SSTREAM_INPUT)
+		stream->codec_ctx->pkt_timebase = av_make_q(1, 1000);
 	if (avcodec_open2(stream->codec_ctx, codec, NULL) < 0) {
 		perror("avcodec_open2");
 		goto codec_err;
 	}
-  // make some checks to be sure format is not changed
-  if (type == SSTREAM_AUDIO) {
-    assert(stream->codec_ctx->sample_fmt == SELECON_DEFAULT_AUDIO_SAMPLE_FMT);
-    assert(stream->codec_ctx->sample_rate == SELECON_DEFAULT_AUDIO_SAMPLE_RATE);
-    assert(stream->codec_ctx->ch_layout.nb_channels == SELECON_DEFAULT_AUDIO_CHANNELS);
-  } else {
-    assert(stream->codec_ctx->pix_fmt == SELECON_DEFAULT_VIDEO_PIXEL_FMT);
-    assert(stream->codec_ctx->width == SELECON_DEFAULT_VIDEO_WIDTH);
-    assert(stream->codec_ctx->height == SELECON_DEFAULT_VIDEO_HEIGHT);
-  }
+	// make some checks to be sure format is not changed
+	if (type == SSTREAM_AUDIO) {
+		assert(stream->codec_ctx->sample_fmt == SELECON_DEFAULT_AUDIO_SAMPLE_FMT);
+		assert(stream->codec_ctx->sample_rate == SELECON_DEFAULT_AUDIO_SAMPLE_RATE);
+		assert(stream->codec_ctx->ch_layout.nb_channels == SELECON_DEFAULT_AUDIO_CHANNELS);
+	} else {
+		assert(stream->codec_ctx->pix_fmt == SELECON_DEFAULT_VIDEO_PIXEL_FMT);
+		assert(stream->codec_ctx->width == SELECON_DEFAULT_VIDEO_WIDTH);
+		assert(stream->codec_ctx->height == SELECON_DEFAULT_VIDEO_HEIGHT);
+	}
 	enum SError err = mfgraph_init(&stream->filter_graph, codec->type);
 	if (err != SELECON_OK)
 		goto mfgraph_err;
@@ -363,12 +364,12 @@ sstream_id_t scont_alloc_stream(struct SStreamContainer *cont,
 		return stream;
 	stream->part_id = part_id;
 	if (dir == SSTREAM_INPUT) {
-		stream->media_handler = cont->media_handler;
-    stream->media_user_data = cont->user_data;
-  } else {
-		stream->packet_handler = cont->packet_handler;
-    stream->packet_user_data = cont->user_data;
-  }
+		stream->media_handler   = cont->media_handler;
+		stream->media_user_data = cont->user_data;
+	} else {
+		stream->packet_handler   = cont->packet_handler;
+		stream->packet_user_data = cont->user_data;
+	}
 	insert_stream(cont, stream);
 	return stream;
 }
@@ -381,7 +382,9 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 		if (cont->in[i] == *stream) {
 			sstream_free(stream);
 			if (i + 1 < cont->nb_in)
-				memmove(&cont->in[i], &cont->in[i + 1], (cont->nb_in - i - 1) * sizeof(struct SStream*));
+				memmove(&cont->in[i],
+				        &cont->in[i + 1],
+				        (cont->nb_in - i - 1) * sizeof(struct SStream *));
 			cont->nb_in--;
 			pthread_rwlock_unlock(&cont->mutex);
 			return;
@@ -391,7 +394,9 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 		if (cont->out[i] == *stream) {
 			sstream_free(stream);
 			if (i + 1 < cont->nb_out)
-				memmove(&cont->out[i], &cont->out[i + 1], (cont->nb_out - i - 1) * sizeof(struct SStream*));
+				memmove(&cont->out[i],
+				        &cont->out[i + 1],
+				        (cont->nb_out - i - 1) * sizeof(struct SStream *));
 			cont->nb_out--;
 			pthread_rwlock_unlock(&cont->mutex);
 			return;
@@ -402,23 +407,27 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 }
 
 void scont_close_streams(struct SStreamContainer *cont, part_id_t part_id) {
-  pthread_rwlock_wrlock(&cont->mutex);
+	pthread_rwlock_wrlock(&cont->mutex);
 	for (size_t i = 0; i < cont->nb_in; ++i) {
 		if (cont->in[i]->part_id == part_id) {
 			sstream_free(&cont->in[i]);
 			if (i + 1 < cont->nb_in)
-				memmove(&cont->in[i], &cont->in[i + 1], (cont->nb_in - i - 1) * sizeof(struct SStream*));
+				memmove(&cont->in[i],
+				        &cont->in[i + 1],
+				        (cont->nb_in - i - 1) * sizeof(struct SStream *));
 			cont->nb_in--;
-      --i;
+			--i;
 		}
 	}
 	for (size_t i = 0; i < cont->nb_out; ++i) {
 		if (cont->out[i]->part_id == part_id) {
 			sstream_free(&cont->out[i]);
 			if (i + 1 < cont->nb_out)
-				memmove(&cont->out[i], &cont->out[i + 1], (cont->nb_out - i - 1) * sizeof(struct SStream*));
+				memmove(&cont->out[i],
+				        &cont->out[i + 1],
+				        (cont->nb_out - i - 1) * sizeof(struct SStream *));
 			cont->nb_out--;
-      --i;
+			--i;
 		}
 	}
 	pthread_rwlock_unlock(&cont->mutex);
@@ -443,19 +452,19 @@ sstream_id_t scont_find_stream(struct SStreamContainer *cont,
                                part_id_t part_id,
                                enum SStreamType type,
                                enum SStreamDirection dir) {
-  sstream_id_t res = NULL;
-  pthread_rwlock_rdlock(&cont->mutex);
-  if (dir == SSTREAM_INPUT) {
-    for (size_t i = 0; i < cont->nb_in && res == NULL; ++i)
-      if (cont->in[i]->part_id == part_id && cont->in[i]->type == type)
-        res = cont->in[i];
-  } else {
-    for (size_t i = 0; i < cont->nb_out && res == NULL; ++i)
-      if (cont->out[i]->part_id == part_id && cont->out[i]->type == type)
-        res = cont->out[i];
-  }
-  pthread_rwlock_unlock(&cont->mutex);
-  return res;
+	sstream_id_t res = NULL;
+	pthread_rwlock_rdlock(&cont->mutex);
+	if (dir == SSTREAM_INPUT) {
+		for (size_t i = 0; i < cont->nb_in && res == NULL; ++i)
+			if (cont->in[i]->part_id == part_id && cont->in[i]->type == type)
+				res = cont->in[i];
+	} else {
+		for (size_t i = 0; i < cont->nb_out && res == NULL; ++i)
+			if (cont->out[i]->part_id == part_id && cont->out[i]->type == type)
+				res = cont->out[i];
+	}
+	pthread_rwlock_unlock(&cont->mutex);
+	return res;
 }
 
 enum SError scont_push_frame(struct SStreamContainer *cont,

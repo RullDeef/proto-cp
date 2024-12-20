@@ -42,7 +42,7 @@ enum SError selecon_context_init2(struct SContext *context,
 
 part_id_t selecon_get_self_id(struct SContext *context);
 
-enum SError selecon_set_username(struct SContext *context, const char* username);
+enum SError selecon_set_username(struct SContext *context, const char *username);
 
 // print current context state for debugging
 void selecon_context_dump(FILE *fd, struct SContext *context);

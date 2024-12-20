@@ -39,14 +39,14 @@ struct SStream {
 
 	// callback valid for input streams. Called for each received media frame
 	media_handler_fn_t media_handler;
-  void *media_user_data;
+	void *media_user_data;
 
 	// callback valid for output streams. Called for each encoded media packet
 	packet_handler_fn_t packet_handler;
-  void *packet_user_data;
+	void *packet_user_data;
 
 	struct AVCodecContext *codec_ctx;
-  struct SwrContext *swr_context; // resampling to default audio format
+	struct SwrContext *swr_context;  // resampling to default audio format
 	struct MediaFilterGraph filter_graph;
 
 	// if this is input stream - queue holds recvd frames from paired participant.
@@ -63,7 +63,7 @@ struct SStream {
 struct SStreamContainer {
 	media_handler_fn_t media_handler;
 	packet_handler_fn_t packet_handler;
-  void *user_data;
+	void *user_data;
 
 	// outgoing data streams. Client submits audio/video data through this streams
 	// and then worker threads send media to other participants.

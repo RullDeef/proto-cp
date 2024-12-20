@@ -19,7 +19,8 @@ static const char* help_message =
     "OPTIONS:\n"
     "  -h|--help              show this message\n"
     "  -l|--listen-on address current participant address (default "
-    "0.0.0.0:" SELECON_DEFAULT_LISTEN_PORT_STR ")\n"
+    "0.0.0.0:" SELECON_DEFAULT_LISTEN_PORT_STR
+    ")\n"
     "  -u|--user username     set user name\n"
     "  --version              print version and exit\n"
     "  --stub filename        stream given media file in a loop\n"
@@ -36,90 +37,84 @@ static struct Stub* stub               = NULL;
 
 static struct PacketDumpMap* dump_mapper = NULL;
 
-static void media_handler(void *user_data, part_id_t part_id, enum AVMediaType mtype, struct AVFrame *frame) {
-  pdmap_dump(dump_mapper, part_id, mtype, frame);
+static void media_handler(void* user_data,
+                          part_id_t part_id,
+                          enum AVMediaType mtype,
+                          struct AVFrame* frame) {
+	pdmap_dump(dump_mapper, part_id, mtype, frame);
 }
 
 static void process_help_cmd(char* cmd) {
-  char* subcmd = strchr(cmd, ' ');
-  if (subcmd == NULL) {
-    printf(
-      "list of available commands:\n"
-      "  dump    print info about current selecon context state\n"
-      "  exit    end active conference and close cli tool\n"
-      "  help    show this message\n"
-      "  invite  send invitation for joining active conference to other client\n"
-      "  leave   exit conference without exiting cli tool\n"
-      "  quit    same as exit\n"
-      "  sleep   sleep\n"
-      "  stub    set stub media file for playing in conference\n"
-      "\n"
-    );
-  } else {
-    subcmd++;
-    if (strcmp(subcmd, "dump") == 0) {
-      printf(
-        "  > dump\n"
-        "\n"
-        "  Shows state of active selecon context\n"
-        "\n"
-      );
-    } else if (strcmp(subcmd, "exit") == 0) {
-      printf(
-        "  > exit\n"
-        "\n"
-        "  Exit current conference and cli tool\n"
-        "\n"
-      );
-    } else if (strcmp(subcmd, "help") == 0) {
-      printf(
-        "  > help [{command}]\n"
-        "\n"
-        "  List available commands or show help about specific command\n"
-        "\n"
-      );
-    } else if (strcmp(subcmd, "invite") == 0) {
-      printf(
-        "  > invite {ip}\n"
-        "  > invite {ip}:{port}\n"
-        "  > invite file://{socket-path}\n"
-        "\n"
-        "  Send invitation to other client\n"
-        "\n"
-      );
-    } else if (strcmp(subcmd, "leave") == 0) {
-      printf(
-        "  > leave\n"
-        "\n"
-        "  Leave current conference without closing cli tool\n"
-        "\n"
-      );
-    } else if (strcmp(subcmd, "quit") == 0) {
-      printf(
-        "  > quit\n"
-        "\n"
-        "  Exit current conference and cli tool\n"
-        "\n"
-      );
-    } else if (strcmp(subcmd, "sleep") == 0) {
-      printf(
-        "  > sleep {seconds}\n"
-        "\n"
-        "  Sleep given amount of seconds\n"
-        "\n"
-      );
-    } else if (strcmp(subcmd, "stub") == 0) {
-      printf(
-        "  > stub {media-file}\n"
-        "  > stub off\n"
-        "\n"
-        "  Set media file as stub audio/video for showing in conference\n"
-        "\n"
-      );
-    } else {
-      printf("unknown command '%s'\n", subcmd);
-    }
-  }
+	char* subcmd = strchr(cmd, ' ');
+	if (subcmd == NULL) {
+		printf(
+		    "list of available commands:\n"
+		    "  dump    print info about current selecon context state\n"
+		    "  exit    end active conference and close cli tool\n"
+		    "  help    show this message\n"
+		    "  invite  send invitation for joining active conference to other client\n"
+		    "  leave   exit conference without exiting cli tool\n"
+		    "  quit    same as exit\n"
+		    "  sleep   sleep\n"
+		    "  stub    set stub media file for playing in conference\n"
+		    "\n");
+	} else {
+		subcmd++;
+		if (strcmp(subcmd, "dump") == 0) {
+			printf(
+			    "  > dump\n"
+			    "\n"
+			    "  Shows state of active selecon context\n"
+			    "\n");
+		} else if (strcmp(subcmd, "exit") == 0) {
+			printf(
+			    "  > exit\n"
+			    "\n"
+			    "  Exit current conference and cli tool\n"
+			    "\n");
+		} else if (strcmp(subcmd, "help") == 0) {
+			printf(
+			    "  > help [{command}]\n"
+			    "\n"
+			    "  List available commands or show help about specific command\n"
+			    "\n");
+		} else if (strcmp(subcmd, "invite") == 0) {
+			printf(
+			    "  > invite {ip}\n"
+			    "  > invite {ip}:{port}\n"
+			    "  > invite file://{socket-path}\n"
+			    "\n"
+			    "  Send invitation to other client\n"
+			    "\n");
+		} else if (strcmp(subcmd, "leave") == 0) {
+			printf(
+			    "  > leave\n"
+			    "\n"
+			    "  Leave current conference without closing cli tool\n"
+			    "\n");
+		} else if (strcmp(subcmd, "quit") == 0) {
+			printf(
+			    "  > quit\n"
+			    "\n"
+			    "  Exit current conference and cli tool\n"
+			    "\n");
+		} else if (strcmp(subcmd, "sleep") == 0) {
+			printf(
+			    "  > sleep {seconds}\n"
+			    "\n"
+			    "  Sleep given amount of seconds\n"
+			    "\n");
+		} else if (strcmp(subcmd, "stub") == 0) {
+			printf(
+			    "  > stub {media-file}\n"
+			    "  > stub off\n"
+			    "\n"
+			    "  Set media file as stub audio/video for showing in conference\n"
+			    "\n");
+		} else {
+			printf("unknown command '%s'\n", subcmd);
+		}
+	}
 }
 
 static int process_invite_cmd(char* cmd) {
@@ -151,35 +146,35 @@ static int process_dump_cmd(char* cmd) {
 }
 
 static int process_sleep_cmd(char* cmd) {
-  char* seconds_str = strchr(cmd, ' ');
-  if (seconds_str == NULL) {
-    printf("usage: sleep {seconds}\n");
-    return 0;
-  }
-  ++seconds_str;
-  int seconds = atoi(seconds_str);
-  sleep(seconds);
-  return 0;
+	char* seconds_str = strchr(cmd, ' ');
+	if (seconds_str == NULL) {
+		printf("usage: sleep {seconds}\n");
+		return 0;
+	}
+	++seconds_str;
+	int seconds = atoi(seconds_str);
+	sleep(seconds);
+	return 0;
 }
 
 static void update_stub(char* option) {
-  if (strcmp(option, "off") == 0)
+	if (strcmp(option, "off") == 0)
 		stub_close(&stub);
 	else if (access(option, F_OK) != 0)
 		printf("failed to access file %s\n", option);
 	else {
-    printf("loading file \"%s\"\n", option);
-    stub_close(&stub);
-    stub = stub_create_dynamic(context, option);
-  }
+		printf("loading file \"%s\"\n", option);
+		stub_close(&stub);
+		stub = stub_create_dynamic(context, option);
+	}
 }
 
 static int process_stub_cmd(char* cmd) {
 	char* media_file = strchr(cmd, ' ');
 	if (media_file == NULL)
 		printf("usage: stub <media_file>\n   or: stub off\n");
-  else
-    update_stub(++media_file);
+	else
+		update_stub(++media_file);
 	return 0;
 }
 
@@ -190,13 +185,13 @@ static int cmd_loop(void) {
 		printf("failed to initialize context: err = %s\n", serror_str(err));
 		return -1;
 	}
-  if (username != NULL) {
-    err = selecon_set_username(context, username);
-    if (err != SELECON_OK) {
-      printf("failed to set username: err = %s\n", serror_str(err));
-      return -1;
-    }
-  }
+	if (username != NULL) {
+		err = selecon_set_username(context, username);
+		if (err != SELECON_OK) {
+			printf("failed to set username: err = %s\n", serror_str(err));
+			return -1;
+		}
+	}
 	int ret = 0;
 	char cmd[1024];
 	while (true) {
@@ -208,8 +203,8 @@ static int cmd_loop(void) {
 			*newline = '\0';
 		if (STARTS_WITH(cmd, "exit") || STARTS_WITH(cmd, "quit")) {
 			break;
-    } else if (STARTS_WITH(cmd, "help") || STARTS_WITH(cmd, "?")) {
-      process_help_cmd(cmd);
+		} else if (STARTS_WITH(cmd, "help") || STARTS_WITH(cmd, "?")) {
+			process_help_cmd(cmd);
 		} else if (STARTS_WITH(cmd, "dump")) {
 			if ((ret = process_dump_cmd(cmd)))
 				break;
@@ -219,9 +214,9 @@ static int cmd_loop(void) {
 		} else if (STARTS_WITH(cmd, "leave")) {
 			if ((ret = process_leave_cmd(cmd)))
 				break;
-    } else if (STARTS_WITH(cmd, "sleep")) {
-      if ((ret = process_sleep_cmd(cmd)))
-        break;
+		} else if (STARTS_WITH(cmd, "sleep")) {
+			if ((ret = process_sleep_cmd(cmd)))
+				break;
 		} else if (STARTS_WITH(cmd, "stub")) {
 			if ((ret = process_stub_cmd(cmd)))
 				break;
@@ -241,10 +236,10 @@ int main(int argc, char** argv) {
 			return 0;
 		} else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--listen-on") == 0) {
 			participant_address = argv[++i];
-    } else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--user") == 0) {
-      username = argv[++i];
-    } else if (strcmp(argv[i], "--stub") == 0) {
-      update_stub(argv[++i]);
+		} else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--user") == 0) {
+			username = argv[++i];
+		} else if (strcmp(argv[i], "--stub") == 0) {
+			update_stub(argv[++i]);
 		} else {
 			printf("unknown option: %s\n", argv[i]);
 			return -1;

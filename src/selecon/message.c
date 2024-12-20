@@ -1,6 +1,7 @@
 #include "message.h"
 
 #include <stdlib.h>
+
 #include "avutility.h"
 
 struct SMessage* message_alloc(size_t size) {
@@ -37,7 +38,7 @@ struct SMessage* message_invite_accept_alloc(part_id_t id, const char* name, str
 	struct SMsgInviteAccept* msg =
 	    (struct SMsgInviteAccept*)message_alloc2(size, SMSG_INVITE_ACCEPT);
 	msg->id = id;
-  memcpy(&msg->ep, ep, sizeof(struct SEndpoint));
+	memcpy(&msg->ep, ep, sizeof(struct SEndpoint));
 	msg->ep = *ep;
 	strcpy(msg->name, name);
 	return (struct SMessage*)msg;
@@ -49,23 +50,24 @@ struct SMessage* message_invite_reject_alloc(void) {
 
 struct SMsgPartPresence* message_part_presence_alloc(size_t count) {
 	size_t size = sizeof(struct SMsgPartPresence) + count * sizeof(struct PartPresenceState);
-	struct SMsgPartPresence* msg = (struct SMsgPartPresence*)message_alloc2(size, SMSG_PART_PRESENCE);
-	msg->count                   = count;
+	struct SMsgPartPresence* msg =
+	    (struct SMsgPartPresence*)message_alloc2(size, SMSG_PART_PRESENCE);
+	msg->count = count;
 	return msg;
 }
 
-struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket *packet) {
-  size_t size = sizeof(struct SMsgAudio) + av_packet_serialize(NULL, packet);
-  struct SMsgAudio* msg = (struct SMsgAudio*)message_alloc2(size, SMSG_AUDIO);
-  msg->source_part_id = source;
-  av_packet_serialize(msg->data, packet);
-  return (struct SMessage*)msg;
+struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket* packet) {
+	size_t size           = sizeof(struct SMsgAudio) + av_packet_serialize(NULL, packet);
+	struct SMsgAudio* msg = (struct SMsgAudio*)message_alloc2(size, SMSG_AUDIO);
+	msg->source_part_id   = source;
+	av_packet_serialize(msg->data, packet);
+	return (struct SMessage*)msg;
 }
 
-struct SMessage* message_video_alloc(part_id_t source, struct AVPacket *packet) {
-  size_t size = sizeof(struct SMsgVideo) + av_packet_serialize(NULL, packet);
-  struct SMsgVideo* msg = (struct SMsgVideo*)message_alloc2(size, SMSG_VIDEO);
-  msg->source_part_id = source;
-  av_packet_serialize(msg->data, packet);
-  return (struct SMessage*)msg;
+struct SMessage* message_video_alloc(part_id_t source, struct AVPacket* packet) {
+	size_t size           = sizeof(struct SMsgVideo) + av_packet_serialize(NULL, packet);
+	struct SMsgVideo* msg = (struct SMsgVideo*)message_alloc2(size, SMSG_VIDEO);
+	msg->source_part_id   = source;
+	av_packet_serialize(msg->data, packet);
+	return (struct SMessage*)msg;
 }

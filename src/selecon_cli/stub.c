@@ -16,8 +16,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "config.h"
-#include "avutility.h"
 #include "selecon.h"
 
 struct Stub {
@@ -55,7 +53,7 @@ static void stub_read_file(struct Stub* stub,
 	int audio_stream_index  = a_stream == NULL ? -1 : a_stream->index;
 	int video_stream_index  = v_stream == NULL ? -1 : v_stream->index;
 	struct AVPacket* packet = av_packet_alloc();
-	struct AVFrame* frame   = av_frame_alloc();  
+	struct AVFrame* frame   = av_frame_alloc();
 	while (!stub->close_requested) {
 		if (av_read_frame(fmt_ctx, packet) < 0) {
 			if (errno == 0) {
@@ -74,8 +72,7 @@ static void stub_read_file(struct Stub* stub,
 			av_packet_unref(packet);
 			continue;
 		}
-    struct AVStream *stream =
-        packet->stream_index == audio_stream_index ? a_stream : v_stream;
+		struct AVStream* stream = packet->stream_index == audio_stream_index ? a_stream : v_stream;
 		struct AVCodecContext* codecCtx =
 		    packet->stream_index == audio_stream_index ? a_ctx : v_ctx;
 		sstream_id_t stream_id =
@@ -93,14 +90,14 @@ static void stub_read_file(struct Stub* stub,
 				perror("avcodec_receive_frame");
 				goto free_frames;
 			}
-      // update timestamp only for audio, if it is presented, otherwise - only for video
-      if (a_stream == NULL || packet->stream_index == audio_stream_index)
-    			ts_delta += frame->pkt_duration;
+			// update timestamp only for audio, if it is presented, otherwise - only for video
+			if (a_stream == NULL || packet->stream_index == audio_stream_index)
+				ts_delta += frame->pkt_duration;
 			frame->time_base = stream->time_base;
-      if (packet->stream_index == video_stream_index)
-        frame->pict_type = AV_PICTURE_TYPE_NONE; // reset picture type
-      //frame timestamp correct here
-			enum SError err  = selecon_stream_push_frame(stub->context, stream_id, frame);
+			if (packet->stream_index == video_stream_index)
+				frame->pict_type = AV_PICTURE_TYPE_NONE;  // reset picture type
+				                                          // frame timestamp correct here
+			enum SError err = selecon_stream_push_frame(stub->context, stream_id, frame);
 			if (err != SELECON_OK) {
 				perror("selecon_stream_push_frame");
 				goto free_frames;

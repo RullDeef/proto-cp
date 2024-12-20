@@ -2,6 +2,7 @@
 
 #include "selecon.h"
 
+#include <assert.h>
 #include <libavcodec/packet.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -9,13 +10,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <assert.h>
 
-#include "config.h"
-#include "debugging.h"
 #include "avutility.h"
+#include "config.h"
 #include "connection.h"
 #include "context.h"
+#include "debugging.h"
 #include "endpoint.h"
 #include "error.h"
 #include "message.h"
@@ -45,7 +45,7 @@ void scontext_destroy(struct SContext *context) {
 			spart_destroy(&context->participants[i]);
 		free(context->participants);
 		spart_destroy(&context->self);
-    pthread_rwlock_destroy(&context->part_rwlock);
+		pthread_rwlock_destroy(&context->part_rwlock);
 		scont_free(&context->streams);
 	}
 }
@@ -73,8 +73,8 @@ static void add_participant(struct SContext *ctx,
 }
 
 static void remove_participant(struct SContext *ctx, size_t index) {
-  // remove all asociated streams
-  scont_close_streams(&ctx->streams, ctx->participants[index].id);
+	// remove all asociated streams
+	scont_close_streams(&ctx->streams, ctx->participants[index].id);
 	pthread_rwlock_wrlock(&ctx->part_rwlock);
 	spart_destroy(&ctx->participants[index]);
 	for (size_t i = index + 1; i < ctx->nb_participants - 1; ++i)
@@ -150,30 +150,36 @@ static void handle_part_presence_message(struct SContext *ctx,
 	}
 }
 
-static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio* msg) {
-  sstream_id_t stream = scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
-  if (stream == NULL)
-    fprintf(stderr, "stream not found for arrived audio packet from part_id = %llu\n", msg->source_part_id);
-  else {
-    struct AVPacket *packet = av_packet_deserialize(msg->data);
-    if (packet == NULL)
-      fprintf(stderr, "failed to deserialize packet\n");
-    else
-      scont_push_packet(&ctx->streams, stream, packet);
-  }
+static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio *msg) {
+	sstream_id_t stream =
+	    scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
+	if (stream == NULL)
+		fprintf(stderr,
+		        "stream not found for arrived audio packet from part_id = %llu\n",
+		        msg->source_part_id);
+	else {
+		struct AVPacket *packet = av_packet_deserialize(msg->data);
+		if (packet == NULL)
+			fprintf(stderr, "failed to deserialize packet\n");
+		else
+			scont_push_packet(&ctx->streams, stream, packet);
+	}
 }
 
-static void handle_video_packet_message(struct SContext *ctx, struct SMsgVideo* msg) {
-  sstream_id_t stream = scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
-  if (stream == NULL)
-    fprintf(stderr, "stream not found for arrived video packet from part_id = %llu\n", msg->source_part_id);
-  else {
-    struct AVPacket *packet = av_packet_deserialize(msg->data);
-    if (packet == NULL)
-      fprintf(stderr, "failed to deserialize packet\n");
-    else
-      scont_push_packet(&ctx->streams, stream, packet);
-  }
+static void handle_video_packet_message(struct SContext *ctx, struct SMsgVideo *msg) {
+	sstream_id_t stream =
+	    scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
+	if (stream == NULL)
+		fprintf(stderr,
+		        "stream not found for arrived video packet from part_id = %llu\n",
+		        msg->source_part_id);
+	else {
+		struct AVPacket *packet = av_packet_deserialize(msg->data);
+		if (packet == NULL)
+			fprintf(stderr, "failed to deserialize packet\n");
+		else
+			scont_push_packet(&ctx->streams, stream, packet);
+	}
 }
 
 // general message handler routine
@@ -181,34 +187,30 @@ static void handle_message(struct SContext *ctx, size_t part_index, struct SMess
 	switch (msg->type) {
 		case SMSG_PART_PRESENCE:
 			return handle_part_presence_message(ctx, part_index, (struct SMsgPartPresence *)msg);
-    case SMSG_AUDIO:
-      return handle_audio_packet_message(ctx, (struct SMsgAudio*)msg);
-    case SMSG_VIDEO:
-      return handle_video_packet_message(ctx, (struct SMsgVideo*)msg);
-		default:
-      printf("unknown message type received: %d\n", msg->type);
+		case SMSG_AUDIO: return handle_audio_packet_message(ctx, (struct SMsgAudio *)msg);
+		case SMSG_VIDEO: return handle_video_packet_message(ctx, (struct SMsgVideo *)msg);
+		default:         printf("unknown message type received: %d\n", msg->type);
 	}
 }
 
 // received packet from self output stream
 static void packet_handler(void *ctx_raw, struct SStream *stream, struct AVPacket *packet) {
-  struct SContext* ctx = ctx_raw;
-  // send packet to all other participants in conference
-  struct SMessage* msg = NULL;
-  switch (stream->type) {
-    case SSTREAM_AUDIO: msg = message_audio_alloc(ctx->self.id, packet); break;
-    case SSTREAM_VIDEO: msg = message_video_alloc(ctx->self.id, packet); break;
-    default:
-      fprintf(stderr, "unrecognized stream type: %d\n", stream->type);
-      break;
-  }
-  pthread_rwlock_rdlock(&ctx->part_rwlock);
-  for (int i = 0; i < ctx->nb_participants - 1; ++i) {
-    enum SError err = sconn_send(ctx->participants[i].connection, msg);
-    if (err != SELECON_OK)
-      fprintf(stderr, "failed to send media message to participant: err = %s\n", serror_str(err));
-  }
-  pthread_rwlock_unlock(&ctx->part_rwlock);
+	struct SContext *ctx = ctx_raw;
+	// send packet to all other participants in conference
+	struct SMessage *msg = NULL;
+	switch (stream->type) {
+		case SSTREAM_AUDIO: msg = message_audio_alloc(ctx->self.id, packet); break;
+		case SSTREAM_VIDEO: msg = message_video_alloc(ctx->self.id, packet); break;
+		default:            fprintf(stderr, "unrecognized stream type: %d\n", stream->type); break;
+	}
+	pthread_rwlock_rdlock(&ctx->part_rwlock);
+	for (int i = 0; i < ctx->nb_participants - 1; ++i) {
+		enum SError err = sconn_send(ctx->participants[i].connection, msg);
+		if (err != SELECON_OK)
+			fprintf(
+			    stderr, "failed to send media message to participant: err = %s\n", serror_str(err));
+	}
+	pthread_rwlock_unlock(&ctx->part_rwlock);
 }
 
 static void *conf_worker(void *arg) {
@@ -218,7 +220,7 @@ static void *conf_worker(void *arg) {
 	size_t cons_count         = ctx->nb_participants - 1;
 	struct SConnection **cons = calloc(cons_count, sizeof(struct SConnection *));
 	for (size_t i = 0; i < cons_count; ++i) cons[i] = ctx->participants[i].connection;
-  pthread_rwlock_unlock(&ctx->part_rwlock);
+	pthread_rwlock_unlock(&ctx->part_rwlock);
 	struct SMessage *msg = NULL;
 	size_t index         = 0;
 	enum SError err      = SELECON_OK;
@@ -272,12 +274,14 @@ static void *invite_worker(void *arg) {
 					selecon_leave_conference(ctx);  // leave old conference
 					ctx->conf_id = invite->conf_id;
 				}
-      	pthread_rwlock_wrlock(&ctx->part_rwlock);
+				pthread_rwlock_wrlock(&ctx->part_rwlock);
 				add_participant(ctx, invite->part_id, invite->part_name, part_con);
-        sstream_id_t audio_stream = scont_alloc_stream(&ctx->streams, invite->part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
-        sstream_id_t video_stream = scont_alloc_stream(&ctx->streams, invite->part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
-      	pthread_rwlock_unlock(&ctx->part_rwlock);
-        // TODO: memory check
+				sstream_id_t audio_stream = scont_alloc_stream(
+				    &ctx->streams, invite->part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
+				sstream_id_t video_stream = scont_alloc_stream(
+				    &ctx->streams, invite->part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
+				pthread_rwlock_unlock(&ctx->part_rwlock);
+				// TODO: memory check
 				if (ctx->nb_participants == 2 && !ctx->conf_thread_working)
 					pthread_create(&ctx->conf_thread, NULL, conf_worker, ctx);
 				message_free((struct SMessage **)&invite);
@@ -309,8 +313,8 @@ enum SError selecon_context_init(struct SContext *ctx,
 	ctx->self            = spart_init(SELECON_DEFAULT_PART_NAME);
 	ctx->participants    = NULL;
 	ctx->nb_participants = 1;
-	int ret = pthread_rwlock_init(&ctx->part_rwlock, NULL);
-  assert(ret == 0);
+	int ret              = pthread_rwlock_init(&ctx->part_rwlock, NULL);
+	assert(ret == 0);
 	ctx->listen_ep           = *ep;
 	ctx->invite_handler      = invite_handler == NULL ? selecon_accept_any : invite_handler;
 	ctx->initialized         = true;
@@ -344,18 +348,18 @@ enum SError selecon_context_init2(struct SContext *context,
 }
 
 part_id_t selecon_get_self_id(struct SContext *context) {
-  if (!context->initialized)
-    return -1;
-  return context->self.id;
+	if (!context->initialized)
+		return -1;
+	return context->self.id;
 }
 
-enum SError selecon_set_username(struct SContext *context, const char* username) {
-  if (username == NULL)
-    return SELECON_INVALID_ARG;
-  if (!context->initialized)
-    return SELECON_EMPTY_CONTEXT;
-  spart_rename(&context->self, username);
-  return SELECON_OK;
+enum SError selecon_set_username(struct SContext *context, const char *username) {
+	if (username == NULL)
+		return SELECON_INVALID_ARG;
+	if (!context->initialized)
+		return SELECON_EMPTY_CONTEXT;
+	spart_rename(&context->self, username);
+	return SELECON_OK;
 }
 
 void selecon_context_dump(FILE *fd, struct SContext *context) {
@@ -394,12 +398,14 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
-  // create input streams for recving content from new participant
-  sstream_id_t audio_stream = scont_alloc_stream(&context->streams, -1, SSTREAM_AUDIO, SSTREAM_INPUT);
-  sstream_id_t video_stream = scont_alloc_stream(&context->streams, -1, SSTREAM_VIDEO, SSTREAM_INPUT);
-  if (audio_stream == NULL || video_stream == NULL) {
-    return SELECON_MEMORY_ERROR;
-  }
+	// create input streams for recving content from new participant
+	sstream_id_t audio_stream =
+	    scont_alloc_stream(&context->streams, -1, SSTREAM_AUDIO, SSTREAM_INPUT);
+	sstream_id_t video_stream =
+	    scont_alloc_stream(&context->streams, -1, SSTREAM_VIDEO, SSTREAM_INPUT);
+	if (audio_stream == NULL || video_stream == NULL) {
+		return SELECON_MEMORY_ERROR;
+	}
 	struct SConnection *con = NULL;
 	enum SError err         = sconn_connect(&con, ep);
 	if (err != SELECON_OK)
@@ -425,8 +431,8 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 	}
 	add_participant(context, acceptMsg->id, acceptMsg->name, con);
 	pthread_rwlock_unlock(&context->part_rwlock);
-  audio_stream->part_id = acceptMsg->id;
-  video_stream->part_id = acceptMsg->id;
+	audio_stream->part_id = acceptMsg->id;
+	video_stream->part_id = acceptMsg->id;
 	message_free((struct SMessage **)&msg);
 	message_free((struct SMessage **)&acceptMsg);
 	if (context->nb_participants == 2 && !context->conf_thread_working) {
@@ -461,12 +467,12 @@ enum SError selecon_leave_conference(struct SContext *context) {
 	for (size_t i = 0; i < context->nb_participants - 1; ++i)
 		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
 	for (size_t i = 0; i < context->nb_participants - 1; ++i) {
-    scont_close_streams(&context->streams, context->participants[i].id);
+		scont_close_streams(&context->streams, context->participants[i].id);
 		spart_destroy(&context->participants[i]);
-  }
+	}
 	context->nb_participants = 1;
 	pthread_rwlock_unlock(&context->part_rwlock);
-  context->conf_id = rand();
+	context->conf_id = rand();
 	return SELECON_OK;
 }
 
@@ -476,10 +482,10 @@ enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *s
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
-  *stream_id =
+	*stream_id =
 	    scont_alloc_stream(&context->streams, context->self.id, SSTREAM_AUDIO, SSTREAM_OUTPUT);
-  if (*stream_id == NULL)
-    return SELECON_MEMORY_ERROR;
+	if (*stream_id == NULL)
+		return SELECON_MEMORY_ERROR;
 	return SELECON_OK;
 }
 

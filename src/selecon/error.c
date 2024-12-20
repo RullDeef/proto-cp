@@ -3,7 +3,7 @@
 const char* serror_str(enum SError err) {
 	switch (err) {
 		case SELECON_OK:              return "ok";
-    case SELECON_MEMORY_ERROR:    return "memory error";
+		case SELECON_MEMORY_ERROR:    return "memory error";
 		case SELECON_INVALID_ARG:     return "invalid argument";
 		case SELECON_INVALID_ADDRESS: return "invalid address";
 		case SELECON_CON_ERROR:       return "connection error";

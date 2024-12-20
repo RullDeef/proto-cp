@@ -78,15 +78,16 @@ struct SMsgPartPresence {
 };
 
 struct SMsgAudio {
-  struct SMessage base;
-  part_id_t source_part_id; // some participants can play 'retransmitor' role and transfer others' packets
-  uint8_t data[]; // size of payload must be calculated dynamically from base.size field 
+	struct SMessage base;
+	part_id_t source_part_id;  // some participants can play 'retransmitor' role and transfer
+	                           // others' packets
+	uint8_t data[];  // size of payload must be calculated dynamically from base.size field
 };
 
 struct SMsgVideo {
-  struct SMessage base;
-  part_id_t source_part_id;
-  uint8_t data[];
+	struct SMessage base;
+	part_id_t source_part_id;
+	uint8_t data[];
 };
 
 #pragma pack(pop)
@@ -103,8 +104,8 @@ struct SMessage* message_invite_reject_alloc(void);
 struct SMsgPartPresence* message_part_presence_alloc(size_t count);
 
 // allocate audio/video packet message and fill it with data from packet
-struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket *packet);
-struct SMessage* message_video_alloc(part_id_t source, struct AVPacket *packet);
+struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket* packet);
+struct SMessage* message_video_alloc(part_id_t source, struct AVPacket* packet);
 
 #ifdef __cplusplus
 }  // extern "C"
