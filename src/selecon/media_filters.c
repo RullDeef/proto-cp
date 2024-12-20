@@ -89,7 +89,7 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph,
                                      struct AVCodecContext *codec_ctx,
                                      struct AVFrame *frame) {
 	const struct AVFilter *buffer_src  = avfilter_get_by_name("buffer");
-  const struct AVFilter *format = avfilter_get_by_name("format");
+  const struct AVFilter *scale = avfilter_get_by_name("scale");
 	const struct AVFilter *buffer_sink = avfilter_get_by_name("buffersink");
   char args[512];
 
@@ -110,11 +110,11 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph,
     assert(0);
   }
 
-	struct AVFilterContext *format_ctx =
-	    avfilter_graph_alloc_filter(mf_graph->filter_graph, format, "format");
+	struct AVFilterContext *scale_ctx =
+	    avfilter_graph_alloc_filter(mf_graph->filter_graph, scale, "scale");
 
-  snprintf(args, sizeof(args), "pix_fmts=%s", av_get_pix_fmt_name(SELECON_DEFAULT_VIDEO_PIXEL_FMT));
-  err = avfilter_init_str(format_ctx, args);
+  snprintf(args, sizeof(args), "width=%d:height=%d", SELECON_DEFAULT_VIDEO_WIDTH, SELECON_DEFAULT_VIDEO_HEIGHT);
+  err = avfilter_init_str(scale_ctx, args);
   if (err != 0) {
     fprintf(stderr, "failed to init video filter: err = %d\n", err);
     assert(0);
@@ -128,10 +128,10 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph,
   }
 
   // connect filters
-	err = avfilter_link(mf_graph->filter_src, 0, format_ctx, 0);
+	err = avfilter_link(mf_graph->filter_src, 0, scale_ctx, 0);
 	assert(err == 0);
 
-	err = avfilter_link(format_ctx, 0, mf_graph->filter_sink, 0);
+	err = avfilter_link(scale_ctx, 0, mf_graph->filter_sink, 0);
 	assert(err == 0);
 
 	err = avfilter_graph_config(mf_graph->filter_graph, NULL);
