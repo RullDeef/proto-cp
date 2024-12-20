@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "selecon.h"
 
 #include <libavcodec/packet.h>
@@ -56,11 +58,11 @@ void selecon_context_free(struct SContext **context) {
 	}
 }
 
+// ctx->part_rwlock must be in writer locked state upon calling this function
 static void add_participant(struct SContext *ctx,
                             part_id_t id,
                             const char *name,
                             struct SConnection *con) {
-	pthread_rwlock_wrlock(&ctx->part_rwlock);
 	ctx->participants =
 	    reallocarray(ctx->participants, ctx->nb_participants, sizeof(struct SParticipant));
 	size_t index                        = ctx->nb_participants - 1;
@@ -68,24 +70,17 @@ static void add_participant(struct SContext *ctx,
 	ctx->participants[index].connection = con;
 	ctx->participants[index].name       = strdup(name);
 	ctx->nb_participants++;
-	pthread_rwlock_unlock(&ctx->part_rwlock);
 }
 
 static void remove_participant(struct SContext *ctx, size_t index) {
   // remove all asociated streams
-  TRACE_CALL;
   scont_close_streams(&ctx->streams, ctx->participants[index].id);
-  TRACE_CALL;
-  // TODO: solve deadlock here!!!!
-  // when invited participant leaves
 	pthread_rwlock_wrlock(&ctx->part_rwlock);
-  TRACE_CALL;
 	spart_destroy(&ctx->participants[index]);
 	for (size_t i = index + 1; i < ctx->nb_participants - 1; ++i)
 		ctx->participants[i - 1] = ctx->participants[i];
 	ctx->nb_participants--;
 	pthread_rwlock_unlock(&ctx->part_rwlock);
-  TRACE_CALL;
 }
 
 // handshake procesdure
@@ -207,7 +202,7 @@ static void *conf_worker(void *arg) {
 	size_t cons_count         = ctx->nb_participants - 1;
 	struct SConnection **cons = calloc(cons_count, sizeof(struct SConnection *));
 	for (size_t i = 0; i < cons_count; ++i) cons[i] = ctx->participants[i].connection;
-	pthread_rwlock_unlock(&ctx->part_rwlock);
+  pthread_rwlock_unlock(&ctx->part_rwlock);
 	struct SMessage *msg = NULL;
 	size_t index         = 0;
 	enum SError err      = SELECON_OK;
@@ -261,9 +256,11 @@ static void *invite_worker(void *arg) {
 					selecon_leave_conference(ctx);  // leave old conference
 					ctx->conf_id = invite->conf_id;
 				}
+      	pthread_rwlock_wrlock(&ctx->part_rwlock);
 				add_participant(ctx, invite->part_id, invite->part_name, part_con);
         sstream_id_t audio_stream = scont_alloc_stream(&ctx->streams, invite->part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
         sstream_id_t video_stream = scont_alloc_stream(&ctx->streams, invite->part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
+      	pthread_rwlock_unlock(&ctx->part_rwlock);
         // TODO: memory check
 				if (ctx->nb_participants == 2 && !ctx->conf_thread_working)
 					pthread_create(&ctx->conf_thread, NULL, conf_worker, ctx);
@@ -447,10 +444,13 @@ enum SError selecon_leave_conference(struct SContext *context) {
 	pthread_rwlock_wrlock(&context->part_rwlock);
 	for (size_t i = 0; i < context->nb_participants - 1; ++i)
 		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
-	for (size_t i = 0; i < context->nb_participants - 1; ++i)
+	for (size_t i = 0; i < context->nb_participants - 1; ++i) {
+    scont_close_streams(&context->streams, context->participants[i].id);
 		spart_destroy(&context->participants[i]);
+  }
 	context->nb_participants = 1;
 	pthread_rwlock_unlock(&context->part_rwlock);
+  context->conf_id = rand();
 	return SELECON_OK;
 }
 

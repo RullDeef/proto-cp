@@ -32,11 +32,7 @@ static int init_recursive_mutex(pthread_mutex_t *mutex) {
 	return ret;
 }
 
-static void insert_frame(struct SStream *stream, struct AVFrame *frame) {
-	assert(stream->dir == SSTREAM_OUTPUT);
-	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
-	assert(sframe != NULL);
-	sframe->avframe = frame;
+static void insert_common(struct SStream *stream, struct SFrame *sframe) {
 	pthread_mutex_lock(&stream->mutex);
 	if (stream->tail != NULL)
 		stream->tail->next = sframe;
@@ -48,20 +44,28 @@ static void insert_frame(struct SStream *stream, struct AVFrame *frame) {
 	pthread_mutex_unlock(&stream->mutex);
 }
 
+static void insert_frame(struct SStream *stream, struct AVFrame *frame) {
+	assert(stream->dir == SSTREAM_OUTPUT);
+	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
+  if (sframe == NULL) {
+    fprintf(stderr, "failed to allocate SFrame in insert_frame\n");
+    av_frame_unref(frame);
+  } else {
+    sframe->avframe = frame;
+    insert_common(stream, sframe);
+  }
+}
+
 static void insert_packet(struct SStream *stream, struct AVPacket *packet) {
 	assert(stream->dir == SSTREAM_INPUT);
 	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
-	assert(sframe != NULL);
-	sframe->avpacket = packet;
-	pthread_mutex_lock(&stream->mutex);
-	if (stream->tail != NULL)
-		stream->tail->next = sframe;
-	else {
-		stream->queue = sframe;
-		pthread_cond_signal(&stream->cond);
-	}
-	stream->tail = sframe;
-	pthread_mutex_unlock(&stream->mutex);
+  if (sframe == NULL) {
+    fprintf(stderr, "failed to allocate SFrame in insert_packet\n");
+    av_packet_unref(packet);
+  } else {
+    sframe->avpacket = packet;
+    insert_common(stream, sframe);
+  }
 }
 
 static struct AVFrame *pop_frame(struct SStream *stream) {
@@ -185,7 +189,6 @@ static void *stream_worker(void *arg) {
 }
 
 static void sstream_free(struct SStream **stream) {
-  TRACE_CALL;
 	if (*stream == NULL)
 		return;
 	// clear queue
@@ -198,10 +201,7 @@ static void sstream_free(struct SStream **stream) {
 		(*stream)->queue = next;
 	}
 	pthread_mutex_unlock(&(*stream)->mutex);
-	// wakeup worker thread
-  TRACE_CALL;
-	pthread_cond_signal(&(*stream)->cond);
-  TRACE_CALL;
+	pthread_cond_signal(&(*stream)->cond); // wakeup worker thread
 	pthread_join((*stream)->handler_thread, NULL);
 	mfgraph_free(&(*stream)->filter_graph);
 	avcodec_free_context(&(*stream)->codec_ctx);
@@ -391,14 +391,10 @@ void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {
 }
 
 void scont_close_streams(struct SStreamContainer *cont, part_id_t part_id) {
-  TRACE_CALL;
   pthread_rwlock_wrlock(&cont->mutex);
-  TRACE_CALL;
 	for (size_t i = 0; i < cont->nb_in; ++i) {
 		if (cont->in[i]->part_id == part_id) {
-      TRACE_CALL;
 			sstream_free(&cont->in[i]);
-      TRACE_CALL;
 			if (i + 1 < cont->nb_in)
 				memmove(&cont->in[i], &cont->in[i + 1], (cont->nb_in - i - 1) * sizeof(struct SStream*));
 			cont->nb_in--;
@@ -415,7 +411,6 @@ void scont_close_streams(struct SStreamContainer *cont, part_id_t part_id) {
 		}
 	}
 	pthread_rwlock_unlock(&cont->mutex);
-  TRACE_CALL;
 }
 
 bool scont_has_stream(struct SStreamContainer *cont, sstream_id_t stream) {

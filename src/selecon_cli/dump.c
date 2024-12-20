@@ -82,12 +82,11 @@ static struct PacketDump* pdump_create(const char* filename) {
 }
 
 static void pdump_dump_audio(struct PacketDump *pdump, struct AVFrame *frame) {
-  if (frame != NULL) {
-    printf("pdump_dump_audio:\n");
-    av_frame_dump(stdout, frame);
-  }
   int ret = avcodec_send_frame(pdump->acodec_ctx, frame);
-  assert(ret == 0);
+  if (ret != 0) {
+    fprintf(stderr, "failed to send frame to codec: ret = %d\n", ret);
+    return;
+  }
   AVPacket* packet = av_packet_alloc();
   ret = avcodec_receive_packet(pdump->acodec_ctx, packet);
   while (ret == 0) {
