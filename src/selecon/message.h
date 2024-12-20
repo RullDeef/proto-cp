@@ -102,8 +102,9 @@ struct SMessage* message_invite_reject_alloc(void);
 // allocates part presence message with given states count
 struct SMsgPartPresence* message_part_presence_alloc(size_t count);
 
-// allocate audio packet message and fill it with data from packet
+// allocate audio/video packet message and fill it with data from packet
 struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket *packet);
+struct SMessage* message_video_alloc(part_id_t source, struct AVPacket *packet);
 
 #ifdef __cplusplus
 }  // extern "C"

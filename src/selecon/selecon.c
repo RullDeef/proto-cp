@@ -152,16 +152,28 @@ static void handle_part_presence_message(struct SContext *ctx,
 
 static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio* msg) {
   sstream_id_t stream = scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
-  if (stream == NULL) {
-    fprintf(stderr, "stream not found for arrived packet from part_id = %llu\n", msg->source_part_id);
-    return;
+  if (stream == NULL)
+    fprintf(stderr, "stream not found for arrived audio packet from part_id = %llu\n", msg->source_part_id);
+  else {
+    struct AVPacket *packet = av_packet_deserialize(msg->data);
+    if (packet == NULL)
+      fprintf(stderr, "failed to deserialize packet\n");
+    else
+      scont_push_packet(&ctx->streams, stream, packet);
   }
-  struct AVPacket *packet = av_packet_deserialize(msg->data);
-  if (packet == NULL) {
-    fprintf(stderr, "failed to deserialize packet\n");
-    return;
+}
+
+static void handle_video_packet_message(struct SContext *ctx, struct SMsgVideo* msg) {
+  sstream_id_t stream = scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
+  if (stream == NULL)
+    fprintf(stderr, "stream not found for arrived video packet from part_id = %llu\n", msg->source_part_id);
+  else {
+    struct AVPacket *packet = av_packet_deserialize(msg->data);
+    if (packet == NULL)
+      fprintf(stderr, "failed to deserialize packet\n");
+    else
+      scont_push_packet(&ctx->streams, stream, packet);
   }
-  scont_push_packet(&ctx->streams, stream, packet);
 }
 
 // general message handler routine
@@ -171,6 +183,8 @@ static void handle_message(struct SContext *ctx, size_t part_index, struct SMess
 			return handle_part_presence_message(ctx, part_index, (struct SMsgPartPresence *)msg);
     case SMSG_AUDIO:
       return handle_audio_packet_message(ctx, (struct SMsgAudio*)msg);
+    case SMSG_VIDEO:
+      return handle_video_packet_message(ctx, (struct SMsgVideo*)msg);
 		default:
       printf("unknown message type received: %d\n", msg->type);
 	}
@@ -181,10 +195,12 @@ static void packet_handler(void *ctx_raw, struct SStream *stream, struct AVPacke
   struct SContext* ctx = ctx_raw;
   // send packet to all other participants in conference
   struct SMessage* msg = NULL;
-  if (stream->type == SSTREAM_AUDIO) {
-    msg = message_audio_alloc(ctx->self.id, packet);
-  } else {
-    assert(0);
+  switch (stream->type) {
+    case SSTREAM_AUDIO: msg = message_audio_alloc(ctx->self.id, packet); break;
+    case SSTREAM_VIDEO: msg = message_video_alloc(ctx->self.id, packet); break;
+    default:
+      fprintf(stderr, "unrecognized stream type: %d\n", stream->type);
+      break;
   }
   pthread_rwlock_rdlock(&ctx->part_rwlock);
   for (int i = 0; i < ctx->nb_participants - 1; ++i) {

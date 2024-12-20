@@ -11,13 +11,11 @@
 #include "config.h"
 
 struct PacketDump {
-	//char* filename;
 	struct AVFormatContext* fmt_ctx;
-
   struct AVStream* audio_stream;
   struct AVCodecContext* acodec_ctx;
-
-  //struct AVStream* video_stream;
+  struct AVStream* video_stream;
+  struct AVCodecContext* vcodec_ctx;
 };
 
 struct PacketDumpMap {
@@ -32,7 +30,6 @@ static struct AVStream* create_audio_stream(struct AVFormatContext* fmt_ctx, str
   struct AVStream* stream = avformat_new_stream(fmt_ctx, NULL);
   assert(stream != NULL);
 
-  // create codec context (use raw PCM encoder)
   const struct AVCodec* codec = avcodec_find_encoder(SELECON_DEFAULT_AUDIO_CODEC_ID);
   assert(codec != NULL);
 
@@ -59,6 +56,37 @@ static struct AVStream* create_audio_stream(struct AVFormatContext* fmt_ctx, str
   return stream;
 }
 
+static struct AVStream* create_video_stream(struct AVFormatContext* fmt_ctx, struct AVCodecContext **codec_ctx) {
+  struct AVStream* stream = avformat_new_stream(fmt_ctx, NULL);
+  assert(stream != NULL);
+
+  const struct AVCodec* codec = avcodec_find_encoder(SELECON_DEFAULT_VIDEO_CODEC_ID);
+  assert(codec != NULL);
+
+  *codec_ctx = avcodec_alloc_context3(codec);
+  assert(*codec_ctx != NULL);
+
+  (*codec_ctx)->pix_fmt = SELECON_DEFAULT_VIDEO_PIXEL_FMT;
+  (*codec_ctx)->width = SELECON_DEFAULT_VIDEO_WIDTH;
+  (*codec_ctx)->height = SELECON_DEFAULT_VIDEO_HEIGHT;
+  (*codec_ctx)->framerate = av_make_q(1, SELECON_DEFAULT_VIDEO_FPS);
+  (*codec_ctx)->time_base = av_make_q(1, 1000);
+
+  if (fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+    (*codec_ctx)->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+  int ret = avcodec_open2(*codec_ctx, codec, NULL);
+  assert(ret == 0);
+  assert((*codec_ctx)->pix_fmt == SELECON_DEFAULT_VIDEO_PIXEL_FMT);
+  assert((*codec_ctx)->width == SELECON_DEFAULT_VIDEO_WIDTH);
+  assert((*codec_ctx)->height == SELECON_DEFAULT_VIDEO_HEIGHT);
+  assert((*codec_ctx)->framerate.den == SELECON_DEFAULT_VIDEO_FPS);
+
+  avcodec_parameters_from_context(stream->codecpar, *codec_ctx);
+  stream->r_frame_rate = av_make_q(SELECON_DEFAULT_VIDEO_FPS, 1);
+  return stream;
+}
+
 static struct PacketDump* pdump_create(const char* filename) {
 	struct PacketDump* pdump = calloc(1, sizeof(struct PacketDump));
 
@@ -69,6 +97,7 @@ static struct PacketDump* pdump_create(const char* filename) {
 		return NULL;
 	}
   pdump->audio_stream = create_audio_stream(pdump->fmt_ctx, &pdump->acodec_ctx);
+  pdump->video_stream = create_video_stream(pdump->fmt_ctx, &pdump->vcodec_ctx);
 	if (!(pdump->fmt_ctx->oformat->flags & AVFMT_NOFILE)) {
 		int ret = avio_open(&pdump->fmt_ctx->pb, filename, AVIO_FLAG_WRITE);
 		if (ret < 0) {
@@ -81,43 +110,61 @@ static struct PacketDump* pdump_create(const char* filename) {
 	return pdump;
 }
 
-static void pdump_dump_audio(struct PacketDump *pdump, struct AVFrame *frame) {
-  int ret = avcodec_send_frame(pdump->acodec_ctx, frame);
+static void pdump_dump_common(struct AVFormatContext *fmt_ctx,
+                              struct AVStream* stream,
+                              struct AVCodecContext *codec_ctx,
+                              struct AVFrame* frame) {
+  int ret = avcodec_send_frame(codec_ctx, frame);
   if (ret != 0) {
     fprintf(stderr, "failed to send frame to codec: ret = %d\n", ret);
     return;
   }
   AVPacket* packet = av_packet_alloc();
-  ret = avcodec_receive_packet(pdump->acodec_ctx, packet);
+  ret = avcodec_receive_packet(codec_ctx, packet);
   while (ret == 0) {
-    packet->stream_index = pdump->audio_stream->index;
-    av_packet_rescale_ts(packet,
-                         pdump->acodec_ctx->time_base,
-                         pdump->audio_stream->time_base);
-  	av_interleaved_write_frame(pdump->fmt_ctx, packet);
-    ret = avcodec_receive_packet(pdump->acodec_ctx, packet);
+    packet->stream_index = stream->index;
+    av_packet_rescale_ts(packet, codec_ctx->time_base, stream->time_base);
+  	av_interleaved_write_frame(fmt_ctx, packet);
+    ret = avcodec_receive_packet(codec_ctx, packet);
   }
   assert(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF);
 	av_packet_unref(packet);
 }
 
+static void pdump_dump_audio(struct PacketDump *pdump, struct AVFrame *frame) {
+  pdump_dump_common(pdump->fmt_ctx, pdump->audio_stream, pdump->acodec_ctx, frame);
+}
+
+static void pdump_dump_video(struct PacketDump *pdump, struct AVFrame *frame) {
+  if (frame != NULL) {
+    frame->pict_type = AV_PICTURE_TYPE_NONE; // reset picture type, let encoder decide
+    frame->pts = av_rescale(frame->pts, 1000, 15360); // dirty hack for timestamps
+    frame->pkt_dts = AV_NOPTS_VALUE;
+  }
+  pdump_dump_common(pdump->fmt_ctx, pdump->video_stream, pdump->vcodec_ctx, frame);
+}
+
 static void pdump_free(struct PacketDump** pdump) {
 	if (*pdump != NULL) {
-    pdump_dump_audio(*pdump, NULL); // flush
+    // flush audio/video codecs
+    pdump_dump_audio(*pdump, NULL);
+    pdump_dump_video(*pdump, NULL);
 		int ret = av_write_trailer((*pdump)->fmt_ctx);
     if (ret < 0) {
       printf("failed to write trailer! err = %d\n", ret);
     }
     avcodec_free_context(&(*pdump)->acodec_ctx);
+    avcodec_free_context(&(*pdump)->vcodec_ctx);
 		*pdump = NULL;
 	}
 }
 
 static void pdump_dump(struct PacketDump* pdump, enum AVMediaType mtype, struct AVFrame* frame) {
-  if (mtype == AVMEDIA_TYPE_AUDIO)
-    pdump_dump_audio(pdump, frame);
-  else
-    assert(0);
+  switch (mtype) {
+    case AVMEDIA_TYPE_AUDIO: return pdump_dump_audio(pdump, frame);
+    case AVMEDIA_TYPE_VIDEO: return pdump_dump_video(pdump, frame);
+    default: return assert(0);
+  }
 }
 
 // packet dump map api ------

@@ -36,8 +36,8 @@ static struct Stub* stub               = NULL;
 
 static struct PacketDumpMap* dump_mapper = NULL;
 
-static void media_handler(void *user_data, part_id_t part_id, struct AVFrame *frame) {
-  pdmap_dump(dump_mapper, part_id, AVMEDIA_TYPE_AUDIO, frame);
+static void media_handler(void *user_data, part_id_t part_id, enum AVMediaType mtype, struct AVFrame *frame) {
+  pdmap_dump(dump_mapper, part_id, mtype, frame);
 }
 
 static void process_help_cmd(char* cmd) {

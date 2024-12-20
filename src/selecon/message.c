@@ -61,3 +61,11 @@ struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket *packet) 
   av_packet_serialize(msg->data, packet);
   return (struct SMessage*)msg;
 }
+
+struct SMessage* message_video_alloc(part_id_t source, struct AVPacket *packet) {
+  size_t size = sizeof(struct SMsgVideo) + av_packet_serialize(NULL, packet);
+  struct SMsgVideo* msg = (struct SMsgVideo*)message_alloc2(size, SMSG_VIDEO);
+  msg->source_part_id = source;
+  av_packet_serialize(msg->data, packet);
+  return (struct SMessage*)msg;
+}

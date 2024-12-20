@@ -111,6 +111,7 @@ static struct AVPacket *pop_packet(struct SStream *stream) {
 static void stream_input_worker(struct SStream *stream) {
   int64_t pts = 0;
 	struct AVFrame *frame = av_frame_alloc();
+  enum AVMediaType mtype = stream->type == SSTREAM_AUDIO ? AVMEDIA_TYPE_AUDIO : AVMEDIA_TYPE_VIDEO;
 	while (true) {
 		struct AVPacket *packet = pop_packet(stream);
 		if (packet == NULL) {  // close requested
@@ -132,9 +133,11 @@ static void stream_input_worker(struct SStream *stream) {
 				break;
 			}
       frame->time_base = stream->codec_ctx->time_base;
-      frame->pts = frame->pkt_dts = pts;
-      pts += frame->nb_samples; // time is in 1/sample_rate units
-			stream->media_handler(stream->media_user_data, stream->part_id, frame);
+      if (mtype == AVMEDIA_TYPE_AUDIO) {
+        frame->pts = frame->pkt_dts = pts;
+        pts += frame->nb_samples; // time is in 1/sample_rate units
+      }
+			stream->media_handler(stream->media_user_data, stream->part_id, mtype, frame);
 			frame = av_frame_alloc();
 		}
 	}
@@ -154,7 +157,8 @@ static void stream_output_worker(struct SStream *stream) {
 			continue;
 		}
 		while ((ret = mfgraph_receive(&stream->filter_graph, frame)) >= 0) {
-			frame->time_base = stream->codec_ctx->time_base;
+      fprintf(stderr, "MGRAPH RECV:\n");
+      av_frame_dump(stderr, frame);
 			int ret          = avcodec_send_frame(stream->codec_ctx, frame);
 			if (ret < 0) {
 				fprintf(stderr, "avcodec_send_frame: ret = %d\n", ret);
@@ -297,22 +301,29 @@ static sstream_id_t sstream_create(struct SStreamContainer *cont, enum SStreamTy
 		stream->codec_ctx->sample_rate = SELECON_DEFAULT_AUDIO_SAMPLE_RATE;
 		stream->codec_ctx->frame_size = SELECON_DEFAULT_AUDIO_FRAME_SIZE;
 		av_channel_layout_default(&stream->codec_ctx->ch_layout, SELECON_DEFAULT_AUDIO_CHANNELS);
-		stream->codec_ctx->time_base = av_make_q(1, 1000);
-    if (dir == SSTREAM_INPUT)
-      stream->codec_ctx->pkt_timebase = av_make_q(1, 1000);
-	}
+	} else { // video
+    stream->codec_ctx->pix_fmt = SELECON_DEFAULT_VIDEO_PIXEL_FMT;
+    stream->codec_ctx->framerate = av_make_q(1, SELECON_DEFAULT_VIDEO_FPS);
+    stream->codec_ctx->width = SELECON_DEFAULT_VIDEO_WIDTH;
+    stream->codec_ctx->height = SELECON_DEFAULT_VIDEO_HEIGHT;
+    stream->codec_ctx->sample_aspect_ratio = av_make_q(1, 1);
+  }
+  stream->codec_ctx->time_base = av_make_q(1, 1000);
+  if (dir == SSTREAM_INPUT)
+    stream->codec_ctx->pkt_timebase = av_make_q(1, 1000);
 	if (avcodec_open2(stream->codec_ctx, codec, NULL) < 0) {
 		perror("avcodec_open2");
 		goto codec_err;
 	}
-  // force our format
-  //stream->codec_ctx->sample_fmt  = SELECON_DEFAULT_AUDIO_SAMPLE_FMT;
   // make some checks to be sure format is not changed
   if (type == SSTREAM_AUDIO) {
-    // Opus decoder always opens with fltp sample format no matter what...
-    //assert(stream->codec_ctx->sample_fmt == SELECON_DEFAULT_AUDIO_SAMPLE_FMT);
+    assert(stream->codec_ctx->sample_fmt == SELECON_DEFAULT_AUDIO_SAMPLE_FMT);
     assert(stream->codec_ctx->sample_rate == SELECON_DEFAULT_AUDIO_SAMPLE_RATE);
     assert(stream->codec_ctx->ch_layout.nb_channels == SELECON_DEFAULT_AUDIO_CHANNELS);
+  } else {
+    assert(stream->codec_ctx->pix_fmt == SELECON_DEFAULT_VIDEO_PIXEL_FMT);
+    assert(stream->codec_ctx->width == SELECON_DEFAULT_VIDEO_WIDTH);
+    assert(stream->codec_ctx->height == SELECON_DEFAULT_VIDEO_HEIGHT);
   }
 	enum SError err = mfgraph_init(&stream->filter_graph, codec->type);
 	if (err != SELECON_OK)
