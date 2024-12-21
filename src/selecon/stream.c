@@ -152,7 +152,7 @@ static void stream_output_worker(struct SStream *stream) {
 			av_packet_free(&packet);
 			break;
 		}
-		int ret = mfgraph_send(&stream->filter_graph, stream->codec_ctx, frame);
+		int ret = mfgraph_send(&stream->filter_graph, frame);
 		if (ret < 0) {
 			fprintf(stderr, "mgraph_send: err = %d\n", ret);
 			continue;
@@ -321,21 +321,25 @@ static sstream_id_t sstream_create(struct SStreamContainer *cont,
 		assert(stream->codec_ctx->sample_fmt == SELECON_DEFAULT_AUDIO_SAMPLE_FMT);
 		assert(stream->codec_ctx->sample_rate == SELECON_DEFAULT_AUDIO_SAMPLE_RATE);
 		assert(stream->codec_ctx->ch_layout.nb_channels == SELECON_DEFAULT_AUDIO_CHANNELS);
+		mfgraph_init_audio(&stream->filter_graph,
+		                   SELECON_DEFAULT_AUDIO_SAMPLE_FMT,
+		                   SELECON_DEFAULT_AUDIO_SAMPLE_RATE,
+		                   SELECON_DEFAULT_AUDIO_CHANNELS,
+		                   stream->codec_ctx->frame_size);
 	} else {
 		assert(stream->codec_ctx->pix_fmt == SELECON_DEFAULT_VIDEO_PIXEL_FMT);
 		assert(stream->codec_ctx->width == SELECON_DEFAULT_VIDEO_WIDTH);
 		assert(stream->codec_ctx->height == SELECON_DEFAULT_VIDEO_HEIGHT);
+		mfgraph_init_video(&stream->filter_graph,
+		                   SELECON_DEFAULT_VIDEO_PIXEL_FMT,
+		                   SELECON_DEFAULT_VIDEO_WIDTH,
+		                   SELECON_DEFAULT_VIDEO_HEIGHT);
 	}
-	enum SError err = mfgraph_init(&stream->filter_graph, codec->type);
-	if (err != SELECON_OK)
-		goto mfgraph_err;
 	// init handler thread stuff
 	init_recursive_mutex(&stream->mutex);
 	pthread_cond_init(&stream->cond, NULL);
 	pthread_create(&stream->handler_thread, NULL, stream_worker, stream);
 	return stream;
-mfgraph_err:
-	avcodec_free_context(&stream->codec_ctx);
 codec_err:
 	free(stream);
 	return NULL;

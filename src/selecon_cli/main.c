@@ -1,3 +1,4 @@
+#include <libavdevice/avdevice.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5,6 +6,7 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "dev_io.h"
 #include "dump.h"
 #include "selecon.h"
 #include "stub.h"
@@ -33,6 +35,8 @@ static const char* help_message =
 static const char* participant_address = NULL;
 static const char* username            = NULL;
 static struct SContext* context        = NULL;
+static struct Dev* dev_in              = NULL;
+static struct Dev* dev_out             = NULL;
 static struct Stub* stub               = NULL;
 
 static struct PacketDumpMap* dump_mapper = NULL;
@@ -41,6 +45,8 @@ static void media_handler(void* user_data,
                           part_id_t part_id,
                           enum AVMediaType mtype,
                           struct AVFrame* frame) {
+	if (dev_out != NULL)
+		dev_push_frame(dev_out, mtype, av_frame_clone(frame));
 	pdmap_dump(dump_mapper, part_id, mtype, frame);
 }
 
@@ -49,6 +55,7 @@ static void process_help_cmd(char* cmd) {
 	if (subcmd == NULL) {
 		printf(
 		    "list of available commands:\n"
+		    "  dev     manage IO devices\n"
 		    "  dump    print info about current selecon context state\n"
 		    "  exit    end active conference and close cli tool\n"
 		    "  help    show this message\n"
@@ -60,7 +67,15 @@ static void process_help_cmd(char* cmd) {
 		    "\n");
 	} else {
 		subcmd++;
-		if (strcmp(subcmd, "dump") == 0) {
+		if (strcmp(subcmd, "dev") == 0) {
+			printf(
+			    "  > dev [in|out] {adev-name}\n"
+			    "  > dev [in|out] {adev-name} {vdev-name}\n"
+			    "  > dev [in|out] off\n"
+			    "\n"
+			    "  Opens new input/output device\n"
+			    "\n");
+		} else if (strcmp(subcmd, "dump") == 0) {
 			printf(
 			    "  > dump\n"
 			    "\n"
@@ -117,6 +132,57 @@ static void process_help_cmd(char* cmd) {
 	}
 }
 
+static int process_dev_cmd_parsed(bool in, const char* adev_name, const char* vdev_name) {
+	if (in) {
+		printf("dev in cmd not implemented yet\n");
+	} else {
+		dev_close(&dev_out);
+		if (strcmp(adev_name, "off") == 0)
+			printf("disabled output devices\n");
+		else {
+			dev_out = dev_create_sink(adev_name, vdev_name);
+			if (dev_out == NULL)
+				printf("failed to initialiez output devices\n");
+			else
+				printf("initialized output devices\n");
+		}
+	}
+	return 0;
+}
+
+static int process_dev_cmd(char* cmd) {
+	char* iospec = strchr(cmd, ' ');
+	if (iospec == NULL)
+		goto print_usage;
+	iospec++;
+	bool in = false;
+	if (strncmp(iospec, "in", 2) == 0)
+		in = true;
+	else if (strncmp(iospec, "out", 3) != 0)
+		goto print_usage;
+	const char* adev_name = strchr(iospec, ' ');
+	if (adev_name == NULL)
+		goto print_usage;
+	adev_name++;
+	char* vdev_name = strchr(adev_name, ' ');
+	if (vdev_name != NULL) {
+		*vdev_name = '\0';
+		vdev_name++;
+	}
+	return process_dev_cmd_parsed(in, adev_name, vdev_name);
+print_usage:
+	printf(
+	    "usage: dev [in|out] {adev-name}\n"
+	    "       dev [in|out] {adev-name} {vdev-name}\n"
+	    "       dev [in|out] off\n");
+	return 0;
+}
+
+static int process_dump_cmd(char* cmd) {
+	selecon_context_dump(stdout, context);
+	return 0;
+}
+
 static int process_invite_cmd(char* cmd) {
 	char* addr = strchr(cmd, ' ');
 	if (addr == NULL) {
@@ -137,11 +203,6 @@ static int process_leave_cmd(char* cmd) {
 		printf("failed to leave conference: %s\n", serror_str(err));
 	else
 		printf("leaving conference\n");
-	return 0;
-}
-
-static int process_dump_cmd(char* cmd) {
-	selecon_context_dump(stdout, context);
 	return 0;
 }
 
@@ -205,6 +266,9 @@ static int cmd_loop(void) {
 			break;
 		} else if (STARTS_WITH(cmd, "help") || STARTS_WITH(cmd, "?")) {
 			process_help_cmd(cmd);
+		} else if (STARTS_WITH(cmd, "dev")) {
+			if ((ret = process_dev_cmd(cmd)))
+				break;
 		} else if (STARTS_WITH(cmd, "dump")) {
 			if ((ret = process_dump_cmd(cmd)))
 				break;
@@ -226,6 +290,25 @@ static int cmd_loop(void) {
 	return ret;
 }
 
+// list available audio-video input-output devices
+static void show_devices(void) {
+	const AVInputFormat* indev_fmt   = NULL;
+	const AVOutputFormat* outdev_fmt = NULL;
+	printf("input  audio devices:");
+	while ((indev_fmt = av_input_audio_device_next(indev_fmt)) != NULL)
+		printf(" %s", indev_fmt->name);
+	printf("\noutput audio devices:");
+	while ((outdev_fmt = av_output_audio_device_next(outdev_fmt)) != NULL)
+		printf(" %s", outdev_fmt->name);
+	printf("\ninput  video devices:");
+	while ((indev_fmt = av_input_video_device_next(indev_fmt)) != NULL)
+		printf(" %s", indev_fmt->name);
+	printf("\noutput video devices:");
+	while ((outdev_fmt = av_output_video_device_next(outdev_fmt)) != NULL)
+		printf(" %s", outdev_fmt->name);
+	printf("\n");
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i < argc; ++i) {
 		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -245,9 +328,12 @@ int main(int argc, char** argv) {
 			return -1;
 		}
 	}
-	// init self dumper
-	dump_mapper = pdmap_create("dumps/");
+	avdevice_register_all();
+	show_devices();
+	dump_mapper = pdmap_create("dumps/");  // init media dumper
 	int ret     = cmd_loop();
 	pdmap_free(&dump_mapper);
+	dev_close(&dev_in);
+	dev_close(&dev_out);
 	return ret;
 }
