@@ -40,7 +40,7 @@ void scontext_destroy(struct SContext *context) {
 		context->initialized = false;
 		pthread_join(context->listener_thread, NULL);
 		if (context->conf_thread_working)
-			pthread_join(context->conf_thread, NULL);
+      pthread_join(context->conf_thread, NULL);
 		for (size_t i = 0; i < context->nb_participants - 1; ++i)
 			spart_destroy(&context->participants[i]);
 		free(context->participants);
@@ -161,8 +161,13 @@ static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio *
 		struct AVPacket *packet = av_packet_deserialize(msg->data);
 		if (packet == NULL)
 			fprintf(stderr, "failed to deserialize packet\n");
-		else
-			scont_push_packet(&ctx->streams, stream, packet);
+		else {
+			enum SError err = scont_push_packet(&ctx->streams, stream, &packet);
+      if (err != SELECON_OK) {
+        fprintf(stderr, "failed to push audio packet to stream: err = %s\n", serror_str(err));
+        av_packet_free(&packet);
+      }
+    }
 	}
 }
 
@@ -178,7 +183,7 @@ static void handle_video_packet_message(struct SContext *ctx, struct SMsgVideo *
 		if (packet == NULL)
 			fprintf(stderr, "failed to deserialize packet\n");
 		else
-			scont_push_packet(&ctx->streams, stream, packet);
+			scont_push_packet(&ctx->streams, stream, &packet);
 	}
 }
 
@@ -211,6 +216,7 @@ static void packet_handler(void *ctx_raw, struct SStream *stream, struct AVPacke
 			    stderr, "failed to send media message to participant: err = %s\n", serror_str(err));
 	}
 	pthread_rwlock_unlock(&ctx->part_rwlock);
+  message_free(&msg);
 }
 
 static void *conf_worker(void *arg) {
@@ -244,7 +250,6 @@ static void *conf_worker(void *arg) {
 		if (err == SELECON_OK)
 			handle_message(ctx, index, msg);
 	}
-	ctx->conf_thread_working = false;
 	printf("conf worker stopped\n");
 	message_free(&msg);
 	free(cons);
@@ -340,7 +345,7 @@ enum SError selecon_context_init2(struct SContext *context,
                                   media_handler_fn_t media_handler) {
 	if (address == NULL)
 		return selecon_context_init(context, NULL, invite_handler, media_handler);
-	struct SEndpoint ep;
+	struct SEndpoint ep = { 0 };
 	enum SError err = selecon_parse_endpoint2(&ep, address);
 	if (err == SELECON_OK)
 		err = selecon_context_init(context, &ep, invite_handler, media_handler);
@@ -509,7 +514,7 @@ void selecon_stream_free(struct SContext *context, sstream_id_t *stream_id) {
 
 enum SError selecon_stream_push_frame(struct SContext *context,
                                       sstream_id_t stream_id,
-                                      struct AVFrame *frame) {
+                                      struct AVFrame **frame) {
 	if (context == NULL || stream_id == NULL || frame == NULL)
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)

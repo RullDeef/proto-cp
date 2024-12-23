@@ -111,8 +111,8 @@ sstream_id_t scont_find_stream(struct SStreamContainer *cont,
 
 enum SError scont_push_frame(struct SStreamContainer *cont,
                              sstream_id_t stream,
-                             struct AVFrame *frame);
+                             struct AVFrame **frame);
 
 enum SError scont_push_packet(struct SStreamContainer *cont,
                               sstream_id_t stream,
-                              struct AVPacket *packet);
+                              struct AVPacket **packet);

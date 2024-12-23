@@ -97,7 +97,7 @@ static void stub_read_file(struct Stub* stub,
 			if (packet->stream_index == video_stream_index)
 				frame->pict_type = AV_PICTURE_TYPE_NONE;  // reset picture type
 				                                          // frame timestamp correct here
-			enum SError err = selecon_stream_push_frame(stub->context, stream_id, frame);
+			enum SError err = selecon_stream_push_frame(stub->context, stream_id, &frame);
 			if (err != SELECON_OK) {
 				perror("selecon_stream_push_frame");
 				goto free_frames;

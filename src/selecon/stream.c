@@ -44,27 +44,29 @@ static void insert_common(struct SStream *stream, struct SFrame *sframe) {
 	pthread_mutex_unlock(&stream->mutex);
 }
 
-static void insert_frame(struct SStream *stream, struct AVFrame *frame) {
+static void insert_frame(struct SStream *stream, struct AVFrame **frame) {
 	assert(stream->dir == SSTREAM_OUTPUT);
 	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
 	if (sframe == NULL) {
 		fprintf(stderr, "failed to allocate SFrame in insert_frame\n");
-		av_frame_unref(frame);
+		av_frame_free(frame);
 	} else {
-		sframe->avframe = frame;
+		sframe->avframe = *frame;
 		insert_common(stream, sframe);
+    *frame = NULL;
 	}
 }
 
-static void insert_packet(struct SStream *stream, struct AVPacket *packet) {
+static void insert_packet(struct SStream *stream, struct AVPacket **packet) {
 	assert(stream->dir == SSTREAM_INPUT);
 	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
 	if (sframe == NULL) {
 		fprintf(stderr, "failed to allocate SFrame in insert_packet\n");
-		av_packet_unref(packet);
+		av_packet_free(packet);
 	} else {
-		sframe->avpacket = packet;
+		sframe->avpacket = *packet;
 		insert_common(stream, sframe);
+    *packet = NULL;
 	}
 }
 
@@ -113,12 +115,11 @@ static void stream_input_worker(struct SStream *stream) {
 	struct AVFrame *frame = av_frame_alloc();
 	enum AVMediaType mtype =
 	    stream->type == SSTREAM_AUDIO ? AVMEDIA_TYPE_AUDIO : AVMEDIA_TYPE_VIDEO;
-	while (true) {
-		struct AVPacket *packet = pop_packet(stream);
-		if (packet == NULL) {  // close requested
-			av_frame_free(&frame);
-			break;
-		}
+  // TODO: flush decoder properly
+  struct AVPacket *packet = NULL;
+	do {
+    av_packet_free(&packet);
+		packet = pop_packet(stream);
 		int ret = avcodec_send_packet(stream->codec_ctx, packet);
 		if (ret < 0) {
 			perror("avcodec_send_packet");
@@ -139,9 +140,10 @@ static void stream_input_worker(struct SStream *stream) {
 				pts += frame->nb_samples;  // time is in 1/sample_rate units
 			}
 			stream->media_handler(stream->media_user_data, stream->part_id, mtype, frame);
-			frame = av_frame_alloc();
+      av_frame_unref(frame);
 		}
-	}
+	} while (packet != NULL);
+  av_frame_free(&frame);
 }
 
 static void stream_output_worker(struct SStream *stream) {
@@ -174,11 +176,12 @@ static void stream_output_worker(struct SStream *stream) {
 					break;
 				}
 				stream->packet_handler(stream->packet_user_data, stream, packet);
-				packet = av_packet_alloc();
+        av_packet_unref(packet);
 			}
 		}
 		if (ret != AVERROR(EAGAIN))
-			printf("mfgraph_receive: err = %d\n", ret);
+			fprintf(stderr, "mfgraph_receive: err = %d\n", ret);
+    av_frame_free(&frame);
 	}
 }
 
@@ -203,8 +206,8 @@ static void sstream_free(struct SStream **stream) {
 		free((*stream)->queue);
 		(*stream)->queue = next;
 	}
-	pthread_mutex_unlock(&(*stream)->mutex);
 	pthread_cond_signal(&(*stream)->cond);  // wakeup worker thread
+	pthread_mutex_unlock(&(*stream)->mutex);
 	pthread_join((*stream)->handler_thread, NULL);
 	mfgraph_free(&(*stream)->filter_graph);
 	avcodec_free_context(&(*stream)->codec_ctx);
@@ -473,15 +476,15 @@ sstream_id_t scont_find_stream(struct SStreamContainer *cont,
 
 enum SError scont_push_frame(struct SStreamContainer *cont,
                              sstream_id_t stream,
-                             struct AVFrame *frame) {
+                             struct AVFrame **frame) {
 	enum SError err = SELECON_OK;
 	pthread_rwlock_rdlock(&cont->mutex);
 	if (!scont_has_stream(cont, stream))
 		err = SELECON_INVALID_STREAM;
 	else {
 		// check stream type and frame type
-		assert((stream->type == SSTREAM_AUDIO && frame->nb_samples > 0) ||
-		       (stream->type == SSTREAM_VIDEO && frame->nb_samples == 0));
+		assert((stream->type == SSTREAM_AUDIO && (*frame)->nb_samples > 0) ||
+		       (stream->type == SSTREAM_VIDEO && (*frame)->nb_samples == 0));
 		insert_frame(stream, frame);
 	}
 	pthread_rwlock_unlock(&cont->mutex);
@@ -490,7 +493,7 @@ enum SError scont_push_frame(struct SStreamContainer *cont,
 
 enum SError scont_push_packet(struct SStreamContainer *cont,
                               sstream_id_t stream,
-                              struct AVPacket *packet) {
+                              struct AVPacket **packet) {
 	enum SError err = SELECON_OK;
 	pthread_rwlock_rdlock(&cont->mutex);
 	if (!scont_has_stream(cont, stream))

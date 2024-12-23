@@ -7,17 +7,38 @@ extern "C" {
 #include <libavutil/frame.h>
 }
 
+#include "config.h"
 #include "selecon.h"
 
 static std::deque<std::pair<part_id_t, AVFrame*>> user1RcvQueue;
 static std::deque<std::pair<part_id_t, AVFrame*>> user2RcvQueue;
 
-void user1_rcv_handler(part_id_t part_id, AVFrame* frame) {
+void user1_rcv_handler(void *user_data, part_id_t part_id, AVMediaType mtype, AVFrame* frame) {
+  frame = av_frame_clone(frame);
 	user1RcvQueue.push_back(std::make_pair(part_id, frame));
 }
 
-void user2_rcv_handler(part_id_t part_id, AVFrame* frame) {
+void user2_rcv_handler(void *user_data, part_id_t part_id, AVMediaType mtype, AVFrame* frame) {
+  frame = av_frame_clone(frame);
 	user2RcvQueue.push_back(std::make_pair(part_id, frame));
+}
+
+AVFrame* create_audio_frame(double& time) {
+  AVFrame* frame     = av_frame_alloc();
+	frame->format      = SELECON_DEFAULT_AUDIO_SAMPLE_FMT;
+  frame->sample_rate = SELECON_DEFAULT_AUDIO_SAMPLE_RATE;
+	frame->nb_samples  = SELECON_DEFAULT_AUDIO_FRAME_SIZE;
+  frame->time_base   = av_make_q(1, SELECON_DEFAULT_AUDIO_SAMPLE_RATE);
+  frame->pts         = time * SELECON_DEFAULT_AUDIO_SAMPLE_RATE;
+	av_channel_layout_default(&frame->ch_layout, SELECON_DEFAULT_AUDIO_CHANNELS);
+	av_frame_get_buffer(frame, 0);
+  // planar floating point expected
+	for (int i = 0; i < SELECON_DEFAULT_AUDIO_FRAME_SIZE; ++i) {
+    for (int c = 0; c < SELECON_DEFAULT_AUDIO_CHANNELS; ++c)
+      reinterpret_cast<float*>(frame->data[c])[i] = sinf(time * M_PI * 440);
+    time += 1.0 / SELECON_DEFAULT_AUDIO_SAMPLE_RATE;
+  }
+  return frame;
 }
 
 class P2P : public testing::Test {
@@ -41,7 +62,11 @@ public:
 		remove(user2SockAddr + sizeof("file://") - 1);
 		free(user1SockAddr);
 		free(user2SockAddr);
+    for (auto& [_, frame] : user1RcvQueue)
+      av_frame_free(&frame);
 		user1RcvQueue.clear();
+    for (auto& [_, frame] : user2RcvQueue)
+      av_frame_free(&frame);
 		user2RcvQueue.clear();
 	}
 
@@ -93,20 +118,24 @@ TEST_F(P2P, passData) {
 	err = selecon_stream_alloc_audio(user1Ctx, &audio_stream);
 	ASSERT_EQ(err, SELECON_OK);
 
-	AVFrame* frame    = av_frame_alloc();
-	frame->format     = AV_SAMPLE_FMT_S16;
-	frame->nb_samples = 960;
-	av_channel_layout_default(&frame->ch_layout, 1);
-	av_frame_get_buffer(frame, 0);
-	for (int i = 0; i < 960; ++i) frame->data[0][i] = static_cast<uint8_t>(i % 64);
+  double time = 0.0;
+  // push 1 second of audio frames
+  while (time < 1.0) {
+    AVFrame* frame = create_audio_frame(time);
+    err = selecon_stream_push_frame(user1Ctx, audio_stream, &frame);
+    av_frame_free(&frame);
+    ASSERT_EQ(err, SELECON_OK);
+  }
 
-	err = selecon_stream_push_frame(user1Ctx, audio_stream, frame);
-	ASSERT_EQ(err, SELECON_OK);
+  // wait until data transfered
+	sleep(5);
 
-	sleep(1);
+	// expect to rcv some frames in user2 queue
+  std::cout << "user2 recvd " << user2RcvQueue.size() << " frames (~"
+    << std::setprecision(4)
+    << user2RcvQueue.size() * (double)SELECON_DEFAULT_AUDIO_FRAME_SIZE / SELECON_DEFAULT_AUDIO_SAMPLE_RATE
+    << " seconds)" << std::endl;
+	ASSERT_GT(user2RcvQueue.size(), 0);
 
-	// expect to rcv frame in user2 queue
-	ASSERT_EQ(user2RcvQueue.size(), 1);
-
-	// send audio data from user2 to user1
+	// TODO: send audio data from user2 to user1
 }

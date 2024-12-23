@@ -7,6 +7,8 @@
 #include <pthread.h>
 
 #include "config.h"
+#include "debugging.h"
+#include "avutility.h"
 #include "media_filters.h"
 #include "selecon.h"
 
@@ -80,6 +82,46 @@ static const AVOutputFormat* find_output_video_fmt(const char* dev_name) {
 	return NULL;
 }
 
+static void input_worker2(struct DevPairInput* dev,
+                          struct AVFormatContext* afmt_ctx,
+                          struct AVCodecContext* acodec_ctx) {
+  sstream_id_t astream = NULL;
+  sstream_id_t vstream = NULL;
+  enum SError err = selecon_stream_alloc_audio(dev->context, &astream);
+  if (err != SELECON_OK) {
+    fprintf(stderr, "failed to allocate audio stream: %s\n", serror_str(err));
+    return;
+  }
+  err = selecon_stream_alloc_video(dev->context, &vstream);
+  if (err != SELECON_OK) {
+    fprintf(stderr, "failed to allocate video stream: %s\n", serror_str(err));
+    selecon_stream_free(dev->context, &astream);
+    return;
+  }
+  struct AVFrame* frame = av_frame_alloc();
+  struct AVPacket* packet = av_packet_alloc();
+  while (!dev->close_requested) {
+    int ret = av_read_frame(afmt_ctx, packet);
+    if (ret < 0) {
+      fprintf(stderr, "failed to read audio data from device: ret = %d\n", ret);
+      break;
+    }
+    avcodec_send_packet(acodec_ctx, packet);
+    ret = avcodec_receive_frame(acodec_ctx, frame);
+    while (ret == 0) {
+      selecon_stream_push_frame(dev->context, astream, &frame);
+      frame = av_frame_alloc();
+      ret = avcodec_receive_frame(acodec_ctx, frame);
+    }
+    assert(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF);
+    av_packet_unref(packet);
+  }
+  av_frame_free(&frame);
+  av_packet_free(&packet);
+  selecon_stream_free(dev->context, &astream);
+  selecon_stream_free(dev->context, &vstream);
+}
+
 static void* input_worker(void* arg) {
 	struct DevPairInput* dev         = arg;
 	const AVInputFormat* afmt        = find_input_audio_fmt(dev->adev_name);
@@ -89,7 +131,21 @@ static void* input_worker(void* arg) {
 		fprintf(stderr, "failed to open audio input\n");
 		return NULL;
 	}
-	// TODO: complete
+  const struct AVCodec* acodec = avcodec_find_decoder(AV_CODEC_ID_PCM_S16LE);
+  struct AVCodecContext* acodec_ctx = avcodec_alloc_context3(acodec);
+  acodec_ctx->sample_fmt = AV_SAMPLE_FMT_S16;
+  acodec_ctx->sample_rate = 48000;
+  av_channel_layout_default(&acodec_ctx->ch_layout, 2);
+  int ret = avcodec_open2(acodec_ctx, acodec, NULL);
+  if (ret < 0) {
+    fprintf(stderr, "failed to open audio device decoder: ret = %d\n", ret);
+    goto codec_err;
+  }
+  // TODO: add support for video reading in parallel
+  input_worker2(dev, afmt_ctx, acodec_ctx);
+  avcodec_free_context(&acodec_ctx);
+codec_err:
+  avformat_close_input(&afmt_ctx);
 	return NULL;
 }
 
@@ -122,7 +178,7 @@ struct Dev* dev_create_sink(const char* adev_name, const char* vdev_name) {
 	astream->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
 	astream->codecpar->sample_rate = 48000;
 	astream->codecpar->format      = AV_SAMPLE_FMT_S16;
-	av_channel_layout_default(&astream->codecpar->ch_layout, 2);  // TODO: fix for stereo
+	av_channel_layout_default(&astream->codecpar->ch_layout, 2);
 	// commit
 	ret = avformat_write_header(dev->output.afmt_ctx, NULL);
 	if (ret < 0) {

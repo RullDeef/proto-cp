@@ -134,7 +134,16 @@ static void process_help_cmd(char* cmd) {
 
 static int process_dev_cmd_parsed(bool in, const char* adev_name, const char* vdev_name) {
 	if (in) {
-		printf("dev in cmd not implemented yet\n");
+    dev_close(&dev_in);
+    if (strcmp(adev_name, "off") == 0)
+      printf("disabled input devices\n");
+    else {
+      dev_in = dev_create_src(context, adev_name, vdev_name);
+      if (dev_in == NULL)
+        printf("failed to initialize input devices\n");
+      else
+        printf("initialized input devices\n");
+    }
 	} else {
 		dev_close(&dev_out);
 		if (strcmp(adev_name, "off") == 0)
@@ -142,7 +151,7 @@ static int process_dev_cmd_parsed(bool in, const char* adev_name, const char* vd
 		else {
 			dev_out = dev_create_sink(adev_name, vdev_name);
 			if (dev_out == NULL)
-				printf("failed to initialiez output devices\n");
+				printf("failed to initialize output devices\n");
 			else
 				printf("initialized output devices\n");
 		}

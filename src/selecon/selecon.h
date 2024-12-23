@@ -74,7 +74,7 @@ void selecon_stream_free(struct SContext *context, sstream_id_t *stream_id);
 // video frame must conform to selected stream resolution
 enum SError selecon_stream_push_frame(struct SContext *context,
                                       sstream_id_t stream_id,
-                                      struct AVFrame *frame);
+                                      struct AVFrame **frame);
 
 #ifdef __cplusplus
 }  // extern "C"

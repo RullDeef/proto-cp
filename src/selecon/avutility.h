@@ -1,9 +1,11 @@
 #pragma once
 
+#include <libavcodec/defs.h>
 #include <libavcodec/packet.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
 #include <libavutil/pixdesc.h>
+#include <assert.h>
 #include <stdio.h>
 
 static void av_frame_dump(FILE* fp, struct AVFrame* frame) {
@@ -60,11 +62,6 @@ static struct AVPacket* av_packet_deserialize(uint8_t* buffer) {
 		return NULL;
 	memcpy(&pkt->size, buffer, sizeof(int));
 	buffer += sizeof(int);
-	pkt->data = (uint8_t*)av_malloc(pkt->size);
-	if (!pkt->data) {
-		av_packet_free(&pkt);
-		return NULL;  // Memory allocation failed
-	}
 	memcpy(&pkt->pts, buffer, sizeof(int64_t));
 	buffer += sizeof(int64_t);
 	memcpy(&pkt->dts, buffer, sizeof(int64_t));
@@ -89,6 +86,13 @@ static struct AVPacket* av_packet_deserialize(uint8_t* buffer) {
 		memcpy(data, buffer, size);
 		buffer += size;
 	}
-	memcpy(pkt->data, buffer, pkt->size);
+  uint8_t *data = av_malloc(pkt->size + AV_INPUT_BUFFER_PADDING_SIZE);
+  assert(data != NULL);
+	memcpy(data, buffer, pkt->size);
+  memset(data + pkt->size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+	if (av_packet_from_data(pkt, data, pkt->size) < 0) {
+    av_free(data);
+		av_packet_free(&pkt);
+	}
 	return pkt;
 }
