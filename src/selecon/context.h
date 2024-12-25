@@ -33,6 +33,9 @@ struct SContext {
 	struct SEndpoint listen_ep;
 	invite_handler_fn_t invite_handler;
 
+  // handler for textual messages. Can be NULL - ignores all messages
+  text_handler_fn_t text_handler;
+
 	// recver thread for messages from active conference participants. Valid for nb_participants > 1
 	pthread_t conf_thread;
 	bool conf_thread_working;

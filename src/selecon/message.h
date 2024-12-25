@@ -32,6 +32,9 @@ enum SMsgType {
 	// participant information updated, not including connection state
 	SMSG_PART_INFO,
 
+  // textual data (aka conference chat)
+  SMSG_TEXT,
+
 	// audio packet received. Contains recording timestamp and id of participants besides actual
 	// audio data
 	SMSG_AUDIO,
@@ -77,6 +80,12 @@ struct SMsgPartPresence {
 	} states[];
 };
 
+struct SMsgText {
+  struct SMessage base;
+  part_id_t source_part_id;
+  char data[]; // NULL-terminated string
+};
+
 struct SMsgAudio {
 	struct SMessage base;
 	part_id_t source_part_id;  // some participants can play 'retransmitor' role and transfer
@@ -102,6 +111,9 @@ struct SMessage* message_invite_reject_alloc(void);
 
 // allocates part presence message with given states count
 struct SMsgPartPresence* message_part_presence_alloc(size_t count);
+
+// allocate text message
+struct SMessage* message_text_alloc(part_id_t source, const char* text);
 
 // allocate audio/video packet message and fill it with data from packet
 struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket* packet);

@@ -41,6 +41,12 @@ static struct Stub* stub               = NULL;
 
 static struct PacketDumpMap* dump_mapper = NULL;
 
+static void text_handler(void* user_data,
+                         part_id_t part_id,
+                         const char* message) {
+  printf("[%llu:] %s\n", part_id, message);
+}
+
 static void media_handler(void* user_data,
                           part_id_t part_id,
                           enum AVMediaType mtype,
@@ -62,6 +68,7 @@ static void process_help_cmd(char* cmd) {
 		    "  invite  send invitation for joining active conference to other client\n"
 		    "  leave   exit conference without exiting cli tool\n"
 		    "  quit    same as exit\n"
+        "  say     send text message to conference chat\n"
 		    "  sleep   sleep\n"
 		    "  stub    set stub media file for playing in conference\n"
 		    "\n");
@@ -113,6 +120,12 @@ static void process_help_cmd(char* cmd) {
 			    "\n"
 			    "  Exit current conference and cli tool\n"
 			    "\n");
+    } else if (strcmp(subcmd, "say") == 0) {
+      printf(
+          "  > say {any-text}\n"
+          "\n"
+          "  Send textual message to everybody in conference\n"
+          "\n");
 		} else if (strcmp(subcmd, "sleep") == 0) {
 			printf(
 			    "  > sleep {seconds}\n"
@@ -215,6 +228,17 @@ static int process_leave_cmd(char* cmd) {
 	return 0;
 }
 
+static int process_say_cmd(char* cmd) {
+  char* text = strchr(cmd, ' ');
+  if (text == NULL) {
+    printf("usage: say {any-text}\n");
+    return 0;
+  }
+  ++text;
+  selecon_send_text(context, text);
+  return 0;
+}
+
 static int process_sleep_cmd(char* cmd) {
 	char* seconds_str = strchr(cmd, ' ');
 	if (seconds_str == NULL) {
@@ -250,7 +274,7 @@ static int process_stub_cmd(char* cmd) {
 
 static int cmd_loop(void) {
 	context         = selecon_context_alloc();
-	enum SError err = selecon_context_init2(context, participant_address, NULL, media_handler);
+	enum SError err = selecon_context_init2(context, participant_address, NULL, text_handler, media_handler);
 	if (err != SELECON_OK) {
 		printf("failed to initialize context: err = %s\n", serror_str(err));
 		return -1;
@@ -287,6 +311,9 @@ static int cmd_loop(void) {
 		} else if (STARTS_WITH(cmd, "leave")) {
 			if ((ret = process_leave_cmd(cmd)))
 				break;
+    } else if (STARTS_WITH(cmd, "say")) {
+      if ((ret = process_say_cmd(cmd)))
+        break;
 		} else if (STARTS_WITH(cmd, "sleep")) {
 			if ((ret = process_sleep_cmd(cmd)))
 				break;
@@ -295,7 +322,6 @@ static int cmd_loop(void) {
 				break;
 		}
 	}
-	selecon_context_free(&context);
 	return ret;
 }
 
@@ -344,5 +370,6 @@ int main(int argc, char** argv) {
 	pdmap_free(&dump_mapper);
 	dev_close(&dev_in);
 	dev_close(&dev_out);
+	selecon_context_free(&context);
 	return ret;
 }

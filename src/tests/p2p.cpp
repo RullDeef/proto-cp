@@ -78,9 +78,9 @@ protected:
 };
 
 TEST_F(P2P, inviteReject) {
-	auto err = selecon_context_init2(user1Ctx, user1SockAddr, NULL, NULL);
+	auto err = selecon_context_init2(user1Ctx, user1SockAddr, NULL, NULL, NULL);
 	ASSERT_EQ(err, SELECON_OK);
-	err = selecon_context_init2(user2Ctx, user2SockAddr, selecon_reject_any, NULL);
+	err = selecon_context_init2(user2Ctx, user2SockAddr, selecon_reject_any, NULL, NULL);
 	ASSERT_EQ(err, SELECON_OK);
 
 	sleep(1);
@@ -91,9 +91,9 @@ TEST_F(P2P, inviteReject) {
 }
 
 TEST_F(P2P, inviteAccept) {
-	auto err = selecon_context_init2(user1Ctx, user1SockAddr, NULL, NULL);
+	auto err = selecon_context_init2(user1Ctx, user1SockAddr, NULL, NULL, NULL);
 	ASSERT_EQ(err, SELECON_OK);
-	err = selecon_context_init2(user2Ctx, user2SockAddr, NULL, NULL);
+	err = selecon_context_init2(user2Ctx, user2SockAddr, NULL, NULL, NULL);
 	ASSERT_EQ(err, SELECON_OK);
 
 	sleep(1);
@@ -104,9 +104,9 @@ TEST_F(P2P, inviteAccept) {
 }
 
 TEST_F(P2P, passData) {
-	auto err = selecon_context_init2(user1Ctx, user1SockAddr, NULL, user1_rcv_handler);
+	auto err = selecon_context_init2(user1Ctx, user1SockAddr, NULL, NULL, user1_rcv_handler);
 	ASSERT_EQ(err, SELECON_OK);
-	err = selecon_context_init2(user2Ctx, user2SockAddr, NULL, user2_rcv_handler);
+	err = selecon_context_init2(user2Ctx, user2SockAddr, NULL, NULL, user2_rcv_handler);
 
 	sleep(1);
 

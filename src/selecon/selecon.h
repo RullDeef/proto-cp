@@ -30,6 +30,7 @@ void selecon_context_free(struct SContext **context);
 enum SError selecon_context_init(struct SContext *context,
                                  struct SEndpoint *ep,
                                  invite_handler_fn_t invite_handler,
+                                 text_handler_fn_t text_handler,
                                  media_handler_fn_t media_handler);
 
 // sets up context params
@@ -38,6 +39,7 @@ enum SError selecon_context_init(struct SContext *context,
 enum SError selecon_context_init2(struct SContext *context,
                                   const char *address,
                                   invite_handler_fn_t invite_handler,
+                                  text_handler_fn_t text_handler,
                                   media_handler_fn_t media_handler);
 
 part_id_t selecon_get_self_id(struct SContext *context);
@@ -61,6 +63,9 @@ enum SError selecon_invite2(struct SContext *context, const char *address);
 
 // tell everybody in conference your intention to leave and disconnect from all of them
 enum SError selecon_leave_conference(struct SContext *context);
+
+// send textual message to conference participants
+enum SError selecon_send_text(struct SContext *context, const char* text);
 
 // 48kHz 16bit mono audio signal supported for now (opus codec)
 enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *stream_id);

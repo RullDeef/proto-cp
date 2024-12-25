@@ -150,6 +150,11 @@ static void handle_part_presence_message(struct SContext *ctx,
 	}
 }
 
+static void handle_text_message(struct SContext *ctx, struct SMsgText *msg) {
+  if (ctx->text_handler != NULL)
+    ctx->text_handler(ctx, msg->source_part_id, msg->data);
+}
+
 static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio *msg) {
 	sstream_id_t stream =
 	    scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
@@ -192,6 +197,7 @@ static void handle_message(struct SContext *ctx, size_t part_index, struct SMess
 	switch (msg->type) {
 		case SMSG_PART_PRESENCE:
 			return handle_part_presence_message(ctx, part_index, (struct SMsgPartPresence *)msg);
+    case SMSG_TEXT:  return handle_text_message(ctx, (struct SMsgText *)msg);
 		case SMSG_AUDIO: return handle_audio_packet_message(ctx, (struct SMsgAudio *)msg);
 		case SMSG_VIDEO: return handle_video_packet_message(ctx, (struct SMsgVideo *)msg);
 		default:         printf("unknown message type received: %d\n", msg->type);
@@ -302,6 +308,7 @@ static void *invite_worker(void *arg) {
 enum SError selecon_context_init(struct SContext *ctx,
                                  struct SEndpoint *ep,
                                  invite_handler_fn_t invite_handler,
+                                 text_handler_fn_t text_handler,
                                  media_handler_fn_t media_handler) {
 	if (ctx == NULL)
 		return SELECON_INVALID_ARG;
@@ -322,6 +329,7 @@ enum SError selecon_context_init(struct SContext *ctx,
 	assert(ret == 0);
 	ctx->listen_ep           = *ep;
 	ctx->invite_handler      = invite_handler == NULL ? selecon_accept_any : invite_handler;
+  ctx->text_handler        = text_handler;
 	ctx->initialized         = true;
 	ctx->conf_thread_working = false;
 	if (pthread_create(&ctx->listener_thread, NULL, invite_worker, ctx) != 0) {
@@ -342,13 +350,14 @@ enum SError selecon_context_init(struct SContext *ctx,
 enum SError selecon_context_init2(struct SContext *context,
                                   const char *address,
                                   invite_handler_fn_t invite_handler,
+                                  text_handler_fn_t text_handler,
                                   media_handler_fn_t media_handler) {
 	if (address == NULL)
-		return selecon_context_init(context, NULL, invite_handler, media_handler);
+		return selecon_context_init(context, NULL, invite_handler, text_handler, media_handler);
 	struct SEndpoint ep = { 0 };
 	enum SError err = selecon_parse_endpoint2(&ep, address);
 	if (err == SELECON_OK)
-		err = selecon_context_init(context, &ep, invite_handler, media_handler);
+		err = selecon_context_init(context, &ep, invite_handler, text_handler, media_handler);
 	return err;
 }
 
@@ -477,8 +486,23 @@ enum SError selecon_leave_conference(struct SContext *context) {
 	}
 	context->nb_participants = 1;
 	pthread_rwlock_unlock(&context->part_rwlock);
+  message_free((struct SMessage**)&msg);
 	context->conf_id = rand();
 	return SELECON_OK;
+}
+
+enum SError selecon_send_text(struct SContext *context, const char* text) {
+  if (context == NULL || text == NULL)
+    return SELECON_INVALID_ARG;
+  if (!context->initialized)
+    return SELECON_EMPTY_CONTEXT;
+  struct SMessage* msg = message_text_alloc(context->self.id, text);
+  pthread_rwlock_rdlock(&context->part_rwlock);
+  for (size_t i = 0; i < context->nb_participants - 1; ++i)
+    sconn_send(context->participants[i].connection, msg);
+  pthread_rwlock_unlock(&context->part_rwlock);
+  message_free(&msg);
+  return SELECON_OK;
 }
 
 // 48kHz 16bit mono audio signal supported for now (opus codec)

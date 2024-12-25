@@ -56,6 +56,14 @@ struct SMsgPartPresence* message_part_presence_alloc(size_t count) {
 	return msg;
 }
 
+struct SMessage* message_text_alloc(part_id_t source, const char* text) {
+  size_t size          = sizeof(struct SMsgText) + strlen(text) + 1;
+  struct SMsgText* msg = (struct SMsgText*)message_alloc2(size, SMSG_TEXT);
+  msg->source_part_id  = source;
+  strcpy(msg->data, text);
+  return msg;
+}
+
 struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket* packet) {
 	size_t size           = sizeof(struct SMsgAudio) + av_packet_serialize(NULL, packet);
 	struct SMsgAudio* msg = (struct SMsgAudio*)message_alloc2(size, SMSG_AUDIO);
