@@ -2,7 +2,6 @@
 
 #include "dev_io.h"
 
-#include <assert.h>
 #include <libavcodec/avcodec.h>
 #include <libavdevice/avdevice.h>
 #include <libavformat/avformat.h>
@@ -14,6 +13,7 @@
 #include "debugging.h"
 #include "media_filters.h"
 #include "selecon.h"
+#include "stime.h"
 
 enum DevPairType { INPUT, OUTPUT };
 
@@ -117,9 +117,8 @@ static void input_audio_worker2(struct DevPairInput* dev,
 	}
 	struct AVFrame* frame   = av_frame_alloc();
 	struct AVPacket* packet = av_packet_alloc();
-	struct timespec ts_start, ts_end;
+	timestamp_t ts          = 0;
 	while (!dev->close_requested) {
-		clock_gettime(CLOCK_MONOTONIC, &ts_start);
 		int ret = av_read_frame(afmt_ctx, packet);
 		if (ret < 0) {
 			fprintf(stderr, "failed to read audio data from device: ret = %d\n", ret);
@@ -129,18 +128,15 @@ static void input_audio_worker2(struct DevPairInput* dev,
 		ret                 = avcodec_receive_frame(acodec_ctx, frame);
 		int64_t samples_got = 0;
 		while (ret == 0) {
-			samples_got += frame->nb_samples;
+			timestamp_t expected_delta = 1000000000LL * frame->nb_samples / frame->sample_rate;
+			reduce_fps(expected_delta, &ts);
 			selecon_stream_push_frame(dev->context, astream, &frame);
 			frame = av_frame_alloc();
 			ret   = avcodec_receive_frame(acodec_ctx, frame);
 		}
-		assert(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF);
+		if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
+			fprintf(stderr, "unexpected ret code in adev worker: %d\n", ret);
 		av_packet_unref(packet);
-		clock_gettime(CLOCK_MONOTONIC, &ts_end);
-		int64_t delta =
-		    1000000000 / acodec_ctx->sample_rate * samples_got - nanosec_delta(ts_start, ts_end);
-		if (delta > 0)
-			usleep(delta / 1000);
 	}
 	av_frame_free(&frame);
 	av_packet_free(&packet);
@@ -158,9 +154,8 @@ static void input_video_worker2(struct DevPairInput* dev,
 	}
 	struct AVFrame* frame   = av_frame_alloc();
 	struct AVPacket* packet = av_packet_alloc();
-	struct timespec ts_start, ts_end;
+	timestamp_t ts          = 0;
 	while (!dev->close_requested) {
-		clock_gettime(CLOCK_MONOTONIC, &ts_start);
 		int ret = av_read_frame(vfmt_ctx, packet);
 		if (ret < 0) {
 			fprintf(stderr, "failed to read video data from device: ret = %d\n", ret);
@@ -170,16 +165,14 @@ static void input_video_worker2(struct DevPairInput* dev,
 		ret = avcodec_receive_frame(vcodec_ctx, frame);
 		while (ret == 0) {
 			frame->sample_aspect_ratio = vfmt_ctx->streams[0]->sample_aspect_ratio;
+			reduce_fps(1000000000LL / SELECON_DEFAULT_VIDEO_FPS, &ts);
 			selecon_stream_push_frame(dev->context, vstream, &frame);
 			frame = av_frame_alloc();
 			ret   = avcodec_receive_frame(vcodec_ctx, frame);
 		}
-		assert(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF);
+		if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
+			fprintf(stderr, "unexpected ret code in vdev worker: %d\n", ret);
 		av_packet_unref(packet);
-		clock_gettime(CLOCK_MONOTONIC, &ts_end);
-		int delta = 1000000000 / 30 - nanosec_delta(ts_start, ts_end);
-		if (delta > 0)
-			usleep(delta / 1000);
 	}
 	av_frame_free(&frame);
 	av_packet_free(&packet);
@@ -314,23 +307,31 @@ cleanup:
 }
 
 // push received frames to output devices
-void dev_push_frame(struct Dev* dev, enum AVMediaType mtype, struct AVFrame* frame) {
-	assert(dev->type == OUTPUT);
+enum SError dev_push_frame(struct Dev* dev, enum AVMediaType mtype, struct AVFrame* frame) {
+	if (dev->type != OUTPUT)
+		return SELECON_INVALID_ARG;
 	if (mtype == AVMEDIA_TYPE_AUDIO) {
-		mfgraph_send(&dev->output.agraph, frame);
+		enum SError err = mfgraph_send(&dev->output.agraph, frame);
+		if (err != SELECON_OK)
+			return err;
 		int ret = mfgraph_receive(&dev->output.agraph, frame);
 		while (ret == 0) {
 			ret = av_interleaved_write_uncoded_frame(dev->output.afmt_ctx, 0, frame);
-			assert(ret >= 0);
+			if (ret < 0)
+				return SELECON_AVERROR;
 			frame = av_frame_alloc();  // av_interleaved_write takes onwership completely
 			ret   = mfgraph_receive(&dev->output.agraph, frame);
 		}
-		assert(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF);
+		if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
+			fprintf(stderr, "unexpected ret code: %d\n", ret);
+			return SELECON_AVERROR;
+		}
 	} else {
 		if (dev->output.vfmt_ctx == NULL)
 			av_frame_free(&frame);
 		else {
 			// av_interleaved_write_uncoded_frame not implemented for sdl,sdl2
+			// TODO: implement rawvideo codec scheme instead
 			frame->display_picture_number = frame->coded_picture_number;
 			int ret = av_interleaved_write_uncoded_frame(dev->output.vfmt_ctx, 0, frame);
 			if (ret < 0) {
@@ -339,9 +340,11 @@ void dev_push_frame(struct Dev* dev, enum AVMediaType mtype, struct AVFrame* fra
 				        "failed to write to output video device: ret = %d (%s)\n",
 				        ret,
 				        av_make_error_string(buf, sizeof(buf), ret));
+				return SELECON_AVERROR;
 			}
 		}
 	}
+	return SELECON_OK;
 }
 
 void dev_close(struct Dev** dev) {

@@ -48,44 +48,54 @@ static void insert_common(struct SStream *stream, struct SFrame *sframe) {
 }
 
 static void insert_frame(struct SStream *stream, struct AVFrame **frame) {
-	assert(stream->dir == SSTREAM_OUTPUT);
-	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
-	if (sframe == NULL) {
-		fprintf(stderr, "failed to allocate SFrame in insert_frame\n");
-		av_frame_free(frame);
-	} else {
-		sframe->avframe = *frame;
-		insert_common(stream, sframe);
-		*frame = NULL;
+	if (stream->dir != SSTREAM_OUTPUT)
+		fprintf(stderr, "invalid stream direction for insert_frame\n");
+	else {
+		struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
+		if (sframe == NULL) {
+			fprintf(stderr, "failed to allocate SFrame in insert_frame\n");
+			av_frame_free(frame);
+		} else {
+			sframe->avframe = *frame;
+			insert_common(stream, sframe);
+			*frame = NULL;
+		}
 	}
 }
 
 static void insert_packet(struct SStream *stream, struct AVPacket **packet) {
-	assert(stream->dir == SSTREAM_INPUT);
-	struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
-	if (sframe == NULL) {
-		fprintf(stderr, "failed to allocate SFrame in insert_packet\n");
-		av_packet_free(packet);
-	} else {
-		sframe->avpacket = *packet;
-		insert_common(stream, sframe);
-		*packet = NULL;
+	if (stream->dir != SSTREAM_INPUT)
+		fprintf(stderr, "invalid stream direction for insert_packet\n");
+	else {
+		struct SFrame *sframe = calloc(1, sizeof(struct SFrame));
+		if (sframe == NULL) {
+			fprintf(stderr, "failed to allocate SFrame in insert_packet\n");
+			av_packet_free(packet);
+		} else {
+			sframe->avpacket = *packet;
+			insert_common(stream, sframe);
+			*packet = NULL;
+		}
 	}
 }
 
 static struct AVFrame *pop_frame(struct SStream *stream) {
-	assert(stream != NULL);
+	if (stream == NULL)
+		return NULL;
 	pthread_mutex_lock(&stream->mutex);
 	if (stream->queue == NULL)
 		pthread_cond_wait(&stream->cond, &stream->mutex);
 	struct AVFrame *frame = NULL;
 	struct SFrame *head   = stream->queue;
 	if (head != NULL) {
-		assert(head->avpacket == NULL);
-		frame         = head->avframe;
-		stream->queue = head->next;
-		if (stream->queue == NULL)
-			stream->tail = NULL;
+		if (head->avpacket != NULL)
+			fprintf(stderr, "AVPacket detected in AVFrame queue\n");
+		else {
+			frame         = head->avframe;
+			stream->queue = head->next;
+			if (stream->queue == NULL)
+				stream->tail = NULL;
+		}
 	}
 	pthread_mutex_unlock(&stream->mutex);
 	if (head != NULL)
@@ -94,18 +104,22 @@ static struct AVFrame *pop_frame(struct SStream *stream) {
 }
 
 static struct AVPacket *pop_packet(struct SStream *stream) {
-	assert(stream != NULL);
+	if (stream == NULL)
+		return NULL;
 	pthread_mutex_lock(&stream->mutex);
 	if (stream->queue == NULL)
 		pthread_cond_wait(&stream->cond, &stream->mutex);
 	struct AVPacket *packet = NULL;
 	struct SFrame *head     = stream->queue;
 	if (head != NULL) {
-		assert(head->avframe == NULL);
-		packet        = head->avpacket;
-		stream->queue = head->next;
-		if (stream->queue == NULL)
-			stream->tail = NULL;
+		if (head->avframe != NULL)
+			fprintf(stderr, "AVFrame detected in AVPacket queue\n");
+		else {
+			packet        = head->avpacket;
+			stream->queue = head->next;
+			if (stream->queue == NULL)
+				stream->tail = NULL;
+		}
 	}
 	pthread_mutex_unlock(&stream->mutex);
 	if (head != NULL)
@@ -238,7 +252,6 @@ static void sstream_free(struct SStream **stream) {
 }
 
 static void stream_dump(FILE *fp, struct SStream *stream) {
-	assert(stream != NULL);
 	pthread_mutex_lock(&stream->mutex);
 	int queue_len = 0;
 	for (struct SFrame *f = stream->queue; f != NULL; f = f->next) queue_len++;
@@ -372,39 +385,52 @@ codec_err:
 	return NULL;
 }
 
-static void insert_stream(struct SStreamContainer *cont, struct SStream *stream) {
+static enum SError insert_stream(struct SStreamContainer *cont, struct SStream *stream) {
+	enum SError err = SELECON_OK;
 	pthread_rwlock_wrlock(&cont->mutex);
 	if (stream->dir == SSTREAM_INPUT) {
-		cont->in = reallocarray(cont->in, ++cont->nb_in, sizeof(struct SStream *));
-		assert(cont->in != NULL);
-		cont->in[cont->nb_in - 1] = stream;
+		struct SStream **new = reallocarray(cont->in, ++cont->nb_in, sizeof(struct SStream *));
+		if (new == NULL)
+			err = SELECON_MEMORY_ERROR;
+		else {
+			new[cont->nb_in - 1] = stream;
+			cont->in             = new;
+		}
 	} else {
-		cont->out = reallocarray(cont->out, ++cont->nb_out, sizeof(struct SStream *));
-		assert(cont->out != NULL);
-		cont->out[cont->nb_out - 1] = stream;
+		struct SStream **new = reallocarray(cont->out, ++cont->nb_out, sizeof(struct SStream *));
+		if (new == NULL)
+			err = SELECON_MEMORY_ERROR;
+		else {
+			new[cont->nb_out - 1] = stream;
+			cont->out             = new;
+		}
 	}
 	pthread_rwlock_unlock(&cont->mutex);
+	return err;
 }
 
-sstream_id_t scont_alloc_stream(struct SStreamContainer *cont,
-                                part_id_t part_id,
-                                timestamp_t start_ts,
-                                enum SStreamType type,
-                                enum SStreamDirection dir) {
-	struct SStream *stream = sstream_create(cont, type, dir);
-	if (stream == NULL)
-		return stream;
-	stream->part_id  = part_id;
-	stream->start_ts = start_ts;
+enum SError scont_alloc_stream(struct SStreamContainer *cont,
+                               part_id_t part_id,
+                               timestamp_t start_ts,
+                               enum SStreamType type,
+                               enum SStreamDirection dir,
+                               sstream_id_t *stream) {
+	*stream = sstream_create(cont, type, dir);
+	if (*stream == NULL)
+		return SELECON_MEMORY_ERROR;
+	(*stream)->part_id  = part_id;
+	(*stream)->start_ts = start_ts;
 	if (dir == SSTREAM_INPUT) {
-		stream->media_handler   = cont->media_handler;
-		stream->media_user_data = cont->user_data;
+		(*stream)->media_handler   = cont->media_handler;
+		(*stream)->media_user_data = cont->user_data;
 	} else {
-		stream->packet_handler   = cont->packet_handler;
-		stream->packet_user_data = cont->user_data;
+		(*stream)->packet_handler   = cont->packet_handler;
+		(*stream)->packet_user_data = cont->user_data;
 	}
-	insert_stream(cont, stream);
-	return stream;
+	enum SError err = insert_stream(cont, *stream);
+	if (err != SELECON_OK)
+		sstream_free(stream);
+	return err;
 }
 
 void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream) {

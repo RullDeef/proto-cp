@@ -18,6 +18,7 @@
 #include "debugging.h"
 #include "endpoint.h"
 #include "error.h"
+#include "media_profile.h"
 #include "message.h"
 #include "participant.h"
 #include "stime.h"
@@ -290,19 +291,25 @@ static void *invite_worker(void *arg) {
 				}
 				pthread_rwlock_wrlock(&ctx->part_rwlock);
 				add_participant(ctx, invite->part_id, invite->part_name, part_con);
-				sstream_id_t audio_stream = scont_alloc_stream(&ctx->streams,
-				                                               invite->part_id,
-				                                               ctx->conf_start_ts,
-				                                               SSTREAM_AUDIO,
-				                                               SSTREAM_INPUT);
-				sstream_id_t video_stream = scont_alloc_stream(&ctx->streams,
-				                                               invite->part_id,
-				                                               ctx->conf_start_ts,
-				                                               SSTREAM_VIDEO,
-				                                               SSTREAM_INPUT);
+				sstream_id_t audio_stream = NULL;
+				sstream_id_t video_stream = NULL;
+				enum SError err           = scont_alloc_stream(&ctx->streams,
+                                                     invite->part_id,
+                                                     ctx->conf_start_ts,
+                                                     SSTREAM_AUDIO,
+                                                     SSTREAM_INPUT,
+                                                     &audio_stream);
+				assert(err == SELECON_OK);
+				err = scont_alloc_stream(&ctx->streams,
+				                         invite->part_id,
+				                         ctx->conf_start_ts,
+				                         SSTREAM_VIDEO,
+				                         SSTREAM_INPUT,
+				                         &video_stream);
+				assert(err == SELECON_OK);
 				pthread_rwlock_unlock(&ctx->part_rwlock);
-				// TODO: memory check
 				if (ctx->nb_participants == 2 && !ctx->conf_thread_working) {
+					// TODO: memory check
 					pthread_create(&ctx->conf_thread, NULL, conf_worker, ctx);
 					pthread_setname_np(ctx->conf_thread, "conf");
 				}
@@ -321,24 +328,26 @@ enum SError selecon_context_init(struct SContext *ctx,
                                  invite_handler_fn_t invite_handler,
                                  text_handler_fn_t text_handler,
                                  media_handler_fn_t media_handler) {
+	register_media_profiles();
 	if (ctx == NULL)
 		return SELECON_INVALID_ARG;
 	if (ctx->initialized)
 		return SELECON_ALREADY_INIT;
-	struct SEndpoint default_ep;
+	struct SEndpoint default_ep = {0};
 	if (ep == NULL) {
 		selecon_parse_endpoint(
 		    &default_ep, SELECON_DEFAULT_LISTEN_ADDR, SELECON_DEFAULT_LISTEN_PORT);
 		ep = &default_ep;
 	}
 	srand(time(NULL));
-	ctx->conf_id         = rand();
-	ctx->conf_start_ts   = get_curr_timestamp();
-	ctx->self            = spart_init(SELECON_DEFAULT_PART_NAME);
-	ctx->participants    = NULL;
-	ctx->nb_participants = 1;
-	int ret              = pthread_rwlock_init(&ctx->part_rwlock, NULL);
-	assert(ret == 0);
+	ctx->conf_id       = rand();
+	ctx->conf_start_ts = get_curr_timestamp();
+	int ret            = pthread_rwlock_init(&ctx->part_rwlock, NULL);
+	if (ret != 0)
+		return SELECON_PTHREAD_ERROR;
+	ctx->nb_participants     = 1;
+	ctx->participants        = NULL;
+	ctx->self                = spart_init(SELECON_DEFAULT_PART_NAME);
 	ctx->listen_ep           = *ep;
 	ctx->invite_handler      = invite_handler == NULL ? selecon_accept_any : invite_handler;
 	ctx->text_handler        = text_handler;
@@ -426,23 +435,33 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
 	// create input streams for recving content from new participant
-	sstream_id_t audio_stream = scont_alloc_stream(
-	    &context->streams, -1, context->conf_start_ts, SSTREAM_AUDIO, SSTREAM_INPUT);
-	sstream_id_t video_stream = scont_alloc_stream(
-	    &context->streams, -1, context->conf_start_ts, SSTREAM_VIDEO, SSTREAM_INPUT);
-	if (audio_stream == NULL || video_stream == NULL) {
-		return SELECON_MEMORY_ERROR;
-	}
-	struct SConnection *con = NULL;
-	enum SError err         = sconn_connect(&con, ep);
+	sstream_id_t audio_stream = NULL;
+	enum SError err           = scont_alloc_stream(
+        &context->streams, -1, context->conf_start_ts, SSTREAM_AUDIO, SSTREAM_INPUT, &audio_stream);
 	if (err != SELECON_OK)
 		return err;
+	sstream_id_t video_stream = NULL;
+	err                       = scont_alloc_stream(
+        &context->streams, -1, context->conf_start_ts, SSTREAM_VIDEO, SSTREAM_INPUT, &video_stream);
+	if (err != SELECON_OK) {
+		scont_close_stream(&context->streams, &audio_stream);
+		return err;
+	}
+	struct SConnection *con = NULL;
+	err                     = sconn_connect(&con, ep);
+	if (err != SELECON_OK) {
+		scont_close_stream(&context->streams, &video_stream);
+		scont_close_stream(&context->streams, &audio_stream);
+		return err;
+	}
 	struct SMessage *inviteMsg = message_invite_alloc(
 	    context->conf_id, context->conf_start_ts, context->self.id, context->self.name);
 	struct SMsgInviteAccept *acceptMsg = NULL;
 	err                                = do_handshake_client(con, inviteMsg, &acceptMsg);
 	if (err != SELECON_OK || acceptMsg == NULL) {
 		sconn_disconnect(&con);
+		scont_close_stream(&context->streams, &video_stream);
+		scont_close_stream(&context->streams, &audio_stream);
 		return err;
 	}
 	printf("participant invited!\n");
@@ -465,8 +484,12 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 	if (context->nb_participants == 2 && !context->conf_thread_working) {
 		// start conf worker
 		int perr = pthread_create(&context->conf_thread, NULL, conf_worker, context);
-		if (perr != 0)
+		if (perr != 0) {
+			scont_close_stream(&context->streams, &video_stream);
+			scont_close_stream(&context->streams, &audio_stream);
+			// TODO: leave conference? kick invited participant? what to do here actually??
 			return SELECON_PTHREAD_ERROR;
+		}
 		pthread_setname_np(context->conf_thread, "conf");
 	}
 	return SELECON_OK;
@@ -475,9 +498,9 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 enum SError selecon_invite2(struct SContext *context, const char *address) {
 	struct SEndpoint ep;
 	enum SError err = selecon_parse_endpoint2(&ep, address);
-	if (err != SELECON_OK)
-		return err;
-	return selecon_invite(context, &ep);
+	if (err == SELECON_OK)
+		err = selecon_invite(context, &ep);
+	return err;
 }
 
 enum SError selecon_leave_conference(struct SContext *context) {
@@ -526,11 +549,12 @@ enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *s
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
-	*stream_id = scont_alloc_stream(
-	    &context->streams, context->self.id, context->conf_start_ts, SSTREAM_AUDIO, SSTREAM_OUTPUT);
-	if (*stream_id == NULL)
-		return SELECON_MEMORY_ERROR;
-	return SELECON_OK;
+	return scont_alloc_stream(&context->streams,
+	                          context->self.id,
+	                          context->conf_start_ts,
+	                          SSTREAM_AUDIO,
+	                          SSTREAM_OUTPUT,
+	                          stream_id);
 }
 
 enum SError selecon_stream_alloc_video(struct SContext *context, sstream_id_t *stream_id) {
@@ -538,9 +562,12 @@ enum SError selecon_stream_alloc_video(struct SContext *context, sstream_id_t *s
 		return SELECON_INVALID_ARG;
 	if (!context->initialized)
 		return SELECON_EMPTY_CONTEXT;
-	*stream_id = scont_alloc_stream(
-	    &context->streams, context->self.id, context->conf_start_ts, SSTREAM_VIDEO, SSTREAM_OUTPUT);
-	return SELECON_OK;
+	return scont_alloc_stream(&context->streams,
+	                          context->self.id,
+	                          context->conf_start_ts,
+	                          SSTREAM_VIDEO,
+	                          SSTREAM_OUTPUT,
+	                          stream_id);
 }
 
 // closes stream

@@ -2,6 +2,8 @@
 
 #include <libavutil/frame.h>
 
+#include "error.h"
+
 struct Dev;
 struct SContext;
 
@@ -12,6 +14,6 @@ struct Dev* dev_create_src(struct SContext* context, const char* adev_name, cons
 struct Dev* dev_create_sink(const char* adev_name, const char* vdev_name);
 
 // push received frames to output devices
-void dev_push_frame(struct Dev* dev, enum AVMediaType mtype, struct AVFrame* frame);
+enum SError dev_push_frame(struct Dev* dev, enum AVMediaType mtype, struct AVFrame* frame);
 
 void dev_close(struct Dev** dev);

@@ -44,7 +44,7 @@ void mfgraph_init_video(struct MediaFilterGraph *mf_graph,
 void mfgraph_free(struct MediaFilterGraph *mf_graph);
 
 // frame ownership remains with caller
-int mfgraph_send(struct MediaFilterGraph *mf_graph, struct AVFrame *frame);
+enum SError mfgraph_send(struct MediaFilterGraph *mf_graph, struct AVFrame *frame);
 
 // frame must be allocated by caller and will be filled with reference-counted buffers
 int mfgraph_receive(struct MediaFilterGraph *mf_graph, struct AVFrame *frame);

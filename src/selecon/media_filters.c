@@ -1,6 +1,5 @@
 #include "media_filters.h"
 
-#include <assert.h>
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
@@ -41,10 +40,15 @@ static enum SError build_filter_graph_audio(struct MediaFilterGraph *mf_graph,
 	char args[512];
 
 	mf_graph->filter_graph = avfilter_graph_alloc();
-	assert(mf_graph->filter_graph != NULL);
+	if (mf_graph->filter_graph == NULL)
+		return SELECON_MEMORY_ERROR;
 
 	mf_graph->filter_src = avfilter_graph_alloc_filter(mf_graph->filter_graph, buffer_src, "in");
-	assert(mf_graph->filter_src != NULL);
+	if (mf_graph->filter_src == NULL) {
+		fprintf(stderr, "failed to allocate audio input filter\n");
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_MEMORY_ERROR;
+	}
 
 	av_channel_layout_describe(&frame->ch_layout, ch_layout, sizeof(ch_layout));
 	snprintf(args,
@@ -54,10 +58,19 @@ static enum SError build_filter_graph_audio(struct MediaFilterGraph *mf_graph,
 	         frame->sample_rate,
 	         ch_layout);
 	int err = avfilter_init_str(mf_graph->filter_src, args);
-	assert(err == 0);
+	if (err != 0) {
+		fprintf(stderr, "failed to initialize audio input filter: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	struct AVFilterContext *format_ctx =
 	    avfilter_graph_alloc_filter(mf_graph->filter_graph, format, "aformat");
+	if (format_ctx == NULL) {
+		fprintf(stderr, "failed to allocate audio format filter\n");
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_MEMORY_ERROR;
+	}
 
 	struct AVChannelLayout layout;
 	av_channel_layout_default(&layout, mf_graph->nb_channels);
@@ -69,34 +82,55 @@ static enum SError build_filter_graph_audio(struct MediaFilterGraph *mf_graph,
 	         mf_graph->sample_rate,
 	         ch_layout);
 	err = avfilter_init_str(format_ctx, args);
-	assert(err == 0);
+	if (err != 0) {
+		fprintf(stderr, "failed to initialize audio format filter: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	mf_graph->filter_sink = avfilter_graph_alloc_filter(mf_graph->filter_graph, buffer_sink, "out");
-	err                   = avfilter_init_str(mf_graph->filter_sink, NULL);
-	assert(err == 0);
+	if (mf_graph->filter_sink == NULL) {
+		fprintf(stderr, "failed to allocate audio output filter\n");
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_MEMORY_ERROR;
+	}
+
+	err = avfilter_init_str(mf_graph->filter_sink, NULL);
+	if (err != 0) {
+		fprintf(stderr, "failed to initialize audio output: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	// connect filters
 	err = avfilter_link(mf_graph->filter_src, 0, format_ctx, 0);
-	assert(err == 0);
+	if (err != 0) {
+		fprintf(stderr, "failed to link audio input to format filter: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	err = avfilter_link(format_ctx, 0, mf_graph->filter_sink, 0);
-	assert(err == 0);
+	if (err != 0) {
+		fprintf(stderr, "failed to link format filter to audio output: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	err = avfilter_graph_config(mf_graph->filter_graph, NULL);
-	assert(err == 0);
-
-	// char *dump = avfilter_graph_dump(mf_graph->filter_graph, NULL);
-	// fprintf(stdout, "initialied audio filter graph: %s\n", dump);
-	// free(dump);
+	if (err != 0) {
+		fprintf(stderr, "failed to configure filter graph: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	mf_graph->audio_fifo =
 	    av_audio_fifo_alloc(mf_graph->sample_fmt, mf_graph->nb_channels, 2 * mf_graph->frame_size);
-	// printf("av audio fifo buffer: %p frame size: %d nb channels: %d sample_fmt: %d\n",
-	//        mf_graph->audio_fifo,
-	//        mf_graph->frame_size,
-	//        mf_graph->nb_channels,
-	//        mf_graph->sample_fmt);
-	assert(mf_graph->audio_fifo != NULL);
+	if (mf_graph->audio_fifo == NULL) {
+		fprintf(stderr, "failed to allocate audio fifo\n");
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_MEMORY_ERROR;
+	}
 	return SELECON_OK;
 }
 
@@ -107,10 +141,15 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph, struct A
 	char args[512];
 
 	mf_graph->filter_graph = avfilter_graph_alloc();
-	assert(mf_graph->filter_graph != NULL);
+	if (mf_graph->filter_graph == NULL)
+		return SELECON_MEMORY_ERROR;
 
 	mf_graph->filter_src = avfilter_graph_alloc_filter(mf_graph->filter_graph, buffer_src, "in");
-	assert(mf_graph->filter_src != NULL);
+	if (mf_graph->filter_src == NULL) {
+		fprintf(stderr, "failed to allocate input video filter\n");
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_MEMORY_ERROR;
+	}
 
 	if (frame->time_base.num == 0)
 		frame->time_base = av_make_q(1, 1000);
@@ -128,35 +167,55 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph, struct A
 	int err = avfilter_init_str(mf_graph->filter_src, args);
 	if (err != 0) {
 		fprintf(stderr, "failed to init video source filter: args=\"%s\" err = %d\n", args, err);
-		assert(0);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_MEMORY_ERROR;
 	}
 
 	struct AVFilterContext *scale_ctx =
 	    avfilter_graph_alloc_filter(mf_graph->filter_graph, scale, "scale");
+	if (scale_ctx == NULL) {
+		fprintf(stderr, "failed to allocate scale video filter\n");
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_MEMORY_ERROR;
+	}
 
 	snprintf(args, sizeof(args), "width=%d:height=%d", mf_graph->width, mf_graph->height);
 	err = avfilter_init_str(scale_ctx, args);
 	if (err != 0) {
 		fprintf(stderr, "failed to init video filter: args=\"%s\" err = %d\n", args, err);
-		assert(0);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
 	}
 
 	mf_graph->filter_sink = avfilter_graph_alloc_filter(mf_graph->filter_graph, buffer_sink, "out");
 	err                   = avfilter_init_str(mf_graph->filter_sink, NULL);
 	if (err != 0) {
 		fprintf(stderr, "failed to init video output filter: err = %d\n", err);
-		assert(0);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
 	}
 
 	// connect filters
 	err = avfilter_link(mf_graph->filter_src, 0, scale_ctx, 0);
-	assert(err == 0);
+	if (err != 0) {
+		fprintf(stderr, "failed to link input video to scale filter: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	err = avfilter_link(scale_ctx, 0, mf_graph->filter_sink, 0);
-	assert(err == 0);
+	if (err != 0) {
+		fprintf(stderr, "failed to link scale filter to video output: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	err = avfilter_graph_config(mf_graph->filter_graph, NULL);
-	assert(err == 0);
+	if (err != 0) {
+		fprintf(stderr, "failed to configure filter graph: err = %d\n", err);
+		avfilter_graph_free(&mf_graph->filter_graph);
+		return SELECON_AVERROR;
+	}
 
 	// char *dump = avfilter_graph_dump(mf_graph->filter_graph, NULL);
 	// fprintf(stdout, "initialied video filter graph: %s\n", dump);
@@ -205,7 +264,7 @@ void mfgraph_free(struct MediaFilterGraph *mf_graph) {
 	}
 }
 
-int mfgraph_send(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
+enum SError mfgraph_send(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
 	// lazy initialization
 	if (mf_graph->filter_graph == NULL) {
 		enum SError err = mf_graph->type == AVMEDIA_TYPE_AUDIO
@@ -213,16 +272,16 @@ int mfgraph_send(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
 		                      : build_filter_graph_video(mf_graph, frame);
 		if (err != SELECON_OK) {
 			fprintf(stderr, "failed to create filter graph: err = %s\n", serror_str(err));
-			return -1;
+			return err;
 		}
 	}
 	int ret = av_buffersrc_write_frame(mf_graph->filter_src, frame);
 	if (ret < 0) {
 		perror("av_buffersrc_add_frame");
-		return ret;
+		return SELECON_AVERROR;
 	}
 	av_frame_unref(frame);
-	return 0;
+	return SELECON_OK;
 }
 
 static int mfgraph_receive_audio(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {

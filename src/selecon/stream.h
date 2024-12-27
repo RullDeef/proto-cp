@@ -91,11 +91,12 @@ void scont_free(struct SStreamContainer *cont);
 
 void scont_dump(FILE *fp, struct SStreamContainer *cont);
 
-sstream_id_t scont_alloc_stream(struct SStreamContainer *cont,
-                                part_id_t part_id,
-                                timestamp_t start_ts,
-                                enum SStreamType type,
-                                enum SStreamDirection dir);
+enum SError scont_alloc_stream(struct SStreamContainer *cont,
+                               part_id_t part_id,
+                               timestamp_t start_ts,
+                               enum SStreamType type,
+                               enum SStreamDirection dir,
+                               sstream_id_t *stream);
 
 void scont_close_stream(struct SStreamContainer *cont, sstream_id_t *stream);
 
