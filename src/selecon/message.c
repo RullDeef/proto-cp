@@ -24,10 +24,14 @@ void message_free(struct SMessage** msg) {
 	}
 }
 
-struct SMessage* message_invite_alloc(conf_id_t conf_id, part_id_t part_id, const char* part_name) {
+struct SMessage* message_invite_alloc(conf_id_t conf_id,
+                                      timestamp_t conf_start_ts,
+                                      part_id_t part_id,
+                                      const char* part_name) {
 	size_t size            = sizeof(struct SMsgInvite) + strlen(part_name) + 1;
 	struct SMsgInvite* msg = (struct SMsgInvite*)message_alloc2(size, SMSG_INVITE);
 	msg->conf_id           = conf_id;
+	msg->conf_start_ts     = conf_start_ts;
 	msg->part_id           = part_id;
 	strcpy(msg->part_name, part_name);
 	return (struct SMessage*)msg;
@@ -57,11 +61,11 @@ struct SMsgPartPresence* message_part_presence_alloc(size_t count) {
 }
 
 struct SMessage* message_text_alloc(part_id_t source, const char* text) {
-  size_t size          = sizeof(struct SMsgText) + strlen(text) + 1;
-  struct SMsgText* msg = (struct SMsgText*)message_alloc2(size, SMSG_TEXT);
-  msg->source_part_id  = source;
-  strcpy(msg->data, text);
-  return msg;
+	size_t size          = sizeof(struct SMsgText) + strlen(text) + 1;
+	struct SMsgText* msg = (struct SMsgText*)message_alloc2(size, SMSG_TEXT);
+	msg->source_part_id  = source;
+	strcpy(msg->data, text);
+	return (struct SMessage*)msg;
 }
 
 struct SMessage* message_audio_alloc(part_id_t source, struct AVPacket* packet) {

@@ -18,18 +18,18 @@
 #include "error.h"
 
 static void prepare_frame(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
-  av_frame_unref(frame);
-  if (mf_graph->type == AVMEDIA_TYPE_AUDIO) {
-    frame->format = mf_graph->sample_fmt;
-    frame->sample_rate = mf_graph->sample_rate;
-    av_channel_layout_default(&frame->ch_layout, mf_graph->nb_channels);
-    frame->nb_samples = mf_graph->frame_size;
-  } else {
-    frame->format = mf_graph->pixel_fmt;
-    frame->width = mf_graph->width;
-    frame->height = mf_graph->height;
-  }
-  av_frame_get_buffer(frame, 0);
+	av_frame_unref(frame);
+	if (mf_graph->type == AVMEDIA_TYPE_AUDIO) {
+		frame->format      = mf_graph->sample_fmt;
+		frame->sample_rate = mf_graph->sample_rate;
+		av_channel_layout_default(&frame->ch_layout, mf_graph->nb_channels);
+		frame->nb_samples = mf_graph->frame_size;
+	} else {
+		frame->format = mf_graph->pixel_fmt;
+		frame->width  = mf_graph->width;
+		frame->height = mf_graph->height;
+	}
+	av_frame_get_buffer(frame, 0);
 }
 
 static enum SError build_filter_graph_audio(struct MediaFilterGraph *mf_graph,
@@ -112,6 +112,9 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph, struct A
 	mf_graph->filter_src = avfilter_graph_alloc_filter(mf_graph->filter_graph, buffer_src, "in");
 	assert(mf_graph->filter_src != NULL);
 
+	if (frame->time_base.num == 0)
+		frame->time_base = av_make_q(1, 1000);
+
 	snprintf(args,
 	         sizeof(args),
 	         "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
@@ -124,7 +127,7 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph, struct A
 	         frame->sample_aspect_ratio.den);
 	int err = avfilter_init_str(mf_graph->filter_src, args);
 	if (err != 0) {
-		fprintf(stderr, "failed to init video source filter: err = %d\n", err);
+		fprintf(stderr, "failed to init video source filter: args=\"%s\" err = %d\n", args, err);
 		assert(0);
 	}
 
@@ -134,7 +137,7 @@ enum SError build_filter_graph_video(struct MediaFilterGraph *mf_graph, struct A
 	snprintf(args, sizeof(args), "width=%d:height=%d", mf_graph->width, mf_graph->height);
 	err = avfilter_init_str(scale_ctx, args);
 	if (err != 0) {
-		fprintf(stderr, "failed to init video filter: err = %d\n", err);
+		fprintf(stderr, "failed to init video filter: args=\"%s\" err = %d\n", args, err);
 		assert(0);
 	}
 
@@ -218,7 +221,7 @@ int mfgraph_send(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
 		perror("av_buffersrc_add_frame");
 		return ret;
 	}
-  av_frame_unref(frame);
+	av_frame_unref(frame);
 	return 0;
 }
 
@@ -227,7 +230,7 @@ static int mfgraph_receive_audio(struct MediaFilterGraph *mf_graph, struct AVFra
 	// Ensure we have enough samples before reading from the buffer
 	while (av_audio_fifo_size(mf_graph->audio_fifo) < mf_graph->frame_size) {
 		// Attempt to get a frame from the filter sink
-    av_frame_unref(frame);
+		av_frame_unref(frame);
 		ret = av_buffersink_get_frame(mf_graph->filter_sink, frame);
 		if (ret < 0) {
 			// Check if the error is a recoverable one
@@ -244,7 +247,7 @@ static int mfgraph_receive_audio(struct MediaFilterGraph *mf_graph, struct AVFra
 	}
 
 	// Read samples from the FIFO into the provided frame (to fill it adequately)
-  prepare_frame(mf_graph, frame);
+	prepare_frame(mf_graph, frame);
 	ret = av_audio_fifo_read(mf_graph->audio_fifo, (void **)frame->data, mf_graph->frame_size);
 	if (ret < 0) {
 		perror("Error reading from audio FIFO");
@@ -254,7 +257,7 @@ static int mfgraph_receive_audio(struct MediaFilterGraph *mf_graph, struct AVFra
 }
 
 static int mfgraph_receive_video(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
-  prepare_frame(mf_graph, frame);
+	prepare_frame(mf_graph, frame);
 	int ret = av_buffersink_get_frame(mf_graph->filter_sink, frame);
 	if (ret < 0 && ret != AVERROR(EAGAIN))
 		perror("Error getting frame from buffer sink");
@@ -265,6 +268,6 @@ int mfgraph_receive(struct MediaFilterGraph *mf_graph, struct AVFrame *frame) {
 	switch (mf_graph->type) {
 		case AVMEDIA_TYPE_AUDIO: return mfgraph_receive_audio(mf_graph, frame);
 		case AVMEDIA_TYPE_VIDEO: return mfgraph_receive_video(mf_graph, frame);
-		default:                 fprintf(stderr, "unrecognized media graph type: %d\n", mf_graph->type); return -1;
+		default: fprintf(stderr, "unrecognized media graph type: %d\n", mf_graph->type); return -1;
 	}
 }

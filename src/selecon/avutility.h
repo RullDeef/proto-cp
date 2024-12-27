@@ -1,11 +1,11 @@
 #pragma once
 
+#include <assert.h>
 #include <libavcodec/defs.h>
 #include <libavcodec/packet.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
 #include <libavutil/pixdesc.h>
-#include <assert.h>
 #include <stdio.h>
 
 static void av_frame_dump(FILE* fp, struct AVFrame* frame) {
@@ -81,17 +81,17 @@ static struct AVPacket* av_packet_deserialize(uint8_t* buffer) {
 		uint8_t* data = av_packet_new_side_data(pkt, type, size);
 		if (data == NULL) {
 			fprintf(stderr, "failed to allocate packet side data\n");
-			exit(-1);
+			exit(-1);  // TODO: avoid exit
 		}
 		memcpy(data, buffer, size);
 		buffer += size;
 	}
-  uint8_t *data = av_malloc(pkt->size + AV_INPUT_BUFFER_PADDING_SIZE);
-  assert(data != NULL);
+	uint8_t* data = av_malloc(pkt->size + AV_INPUT_BUFFER_PADDING_SIZE);
+	assert(data != NULL);  // TODO: handle memory error
 	memcpy(data, buffer, pkt->size);
-  memset(data + pkt->size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+	memset(data + pkt->size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
 	if (av_packet_from_data(pkt, data, pkt->size) < 0) {
-    av_free(data);
+		av_free(data);
 		av_packet_free(&pkt);
 	}
 	return pkt;

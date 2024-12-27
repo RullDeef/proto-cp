@@ -65,7 +65,7 @@ enum SError selecon_invite2(struct SContext *context, const char *address);
 enum SError selecon_leave_conference(struct SContext *context);
 
 // send textual message to conference participants
-enum SError selecon_send_text(struct SContext *context, const char* text);
+enum SError selecon_send_text(struct SContext *context, const char *text);
 
 // 48kHz 16bit mono audio signal supported for now (opus codec)
 enum SError selecon_stream_alloc_audio(struct SContext *context, sstream_id_t *stream_id);

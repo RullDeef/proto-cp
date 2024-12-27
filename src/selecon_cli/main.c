@@ -41,10 +41,8 @@ static struct Stub* stub               = NULL;
 
 static struct PacketDumpMap* dump_mapper = NULL;
 
-static void text_handler(void* user_data,
-                         part_id_t part_id,
-                         const char* message) {
-  printf("[%llu:] %s\n", part_id, message);
+static void text_handler(void* user_data, part_id_t part_id, const char* message) {
+	printf("[%llu:] %s\n", part_id, message);
 }
 
 static void media_handler(void* user_data,
@@ -68,7 +66,7 @@ static void process_help_cmd(char* cmd) {
 		    "  invite  send invitation for joining active conference to other client\n"
 		    "  leave   exit conference without exiting cli tool\n"
 		    "  quit    same as exit\n"
-        "  say     send text message to conference chat\n"
+		    "  say     send text message to conference chat\n"
 		    "  sleep   sleep\n"
 		    "  stub    set stub media file for playing in conference\n"
 		    "\n");
@@ -120,12 +118,12 @@ static void process_help_cmd(char* cmd) {
 			    "\n"
 			    "  Exit current conference and cli tool\n"
 			    "\n");
-    } else if (strcmp(subcmd, "say") == 0) {
-      printf(
-          "  > say {any-text}\n"
-          "\n"
-          "  Send textual message to everybody in conference\n"
-          "\n");
+		} else if (strcmp(subcmd, "say") == 0) {
+			printf(
+			    "  > say {any-text}\n"
+			    "\n"
+			    "  Send textual message to everybody in conference\n"
+			    "\n");
 		} else if (strcmp(subcmd, "sleep") == 0) {
 			printf(
 			    "  > sleep {seconds}\n"
@@ -147,16 +145,16 @@ static void process_help_cmd(char* cmd) {
 
 static int process_dev_cmd_parsed(bool in, const char* adev_name, const char* vdev_name) {
 	if (in) {
-    dev_close(&dev_in);
-    if (strcmp(adev_name, "off") == 0)
-      printf("disabled input devices\n");
-    else {
-      dev_in = dev_create_src(context, adev_name, vdev_name);
-      if (dev_in == NULL)
-        printf("failed to initialize input devices\n");
-      else
-        printf("initialized input devices\n");
-    }
+		dev_close(&dev_in);
+		if (strcmp(adev_name, "off") == 0)
+			printf("disabled input devices\n");
+		else {
+			dev_in = dev_create_src(context, adev_name, vdev_name);
+			if (dev_in == NULL)
+				printf("failed to initialize input devices\n");
+			else
+				printf("initialized input devices\n");
+		}
 	} else {
 		dev_close(&dev_out);
 		if (strcmp(adev_name, "off") == 0)
@@ -229,14 +227,14 @@ static int process_leave_cmd(char* cmd) {
 }
 
 static int process_say_cmd(char* cmd) {
-  char* text = strchr(cmd, ' ');
-  if (text == NULL) {
-    printf("usage: say {any-text}\n");
-    return 0;
-  }
-  ++text;
-  selecon_send_text(context, text);
-  return 0;
+	char* text = strchr(cmd, ' ');
+	if (text == NULL) {
+		printf("usage: say {any-text}\n");
+		return 0;
+	}
+	++text;
+	selecon_send_text(context, text);
+	return 0;
 }
 
 static int process_sleep_cmd(char* cmd) {
@@ -273,8 +271,9 @@ static int process_stub_cmd(char* cmd) {
 }
 
 static int cmd_loop(void) {
-	context         = selecon_context_alloc();
-	enum SError err = selecon_context_init2(context, participant_address, NULL, text_handler, media_handler);
+	context = selecon_context_alloc();
+	enum SError err =
+	    selecon_context_init2(context, participant_address, NULL, text_handler, media_handler);
 	if (err != SELECON_OK) {
 		printf("failed to initialize context: err = %s\n", serror_str(err));
 		return -1;
@@ -311,9 +310,9 @@ static int cmd_loop(void) {
 		} else if (STARTS_WITH(cmd, "leave")) {
 			if ((ret = process_leave_cmd(cmd)))
 				break;
-    } else if (STARTS_WITH(cmd, "say")) {
-      if ((ret = process_say_cmd(cmd)))
-        break;
+		} else if (STARTS_WITH(cmd, "say")) {
+			if ((ret = process_say_cmd(cmd)))
+				break;
 		} else if (STARTS_WITH(cmd, "sleep")) {
 			if ((ret = process_sleep_cmd(cmd)))
 				break;

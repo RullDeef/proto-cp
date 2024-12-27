@@ -32,8 +32,8 @@ enum SMsgType {
 	// participant information updated, not including connection state
 	SMSG_PART_INFO,
 
-  // textual data (aka conference chat)
-  SMSG_TEXT,
+	// textual data (aka conference chat)
+	SMSG_TEXT,
 
 	// audio packet received. Contains recording timestamp and id of participants besides actual
 	// audio data
@@ -57,6 +57,7 @@ struct SMsgInvite {
 	struct SMessage base;
 	conf_id_t conf_id;
 	part_id_t part_id;
+	timestamp_t conf_start_ts;
 	char part_name[];
 };
 
@@ -81,9 +82,9 @@ struct SMsgPartPresence {
 };
 
 struct SMsgText {
-  struct SMessage base;
-  part_id_t source_part_id;
-  char data[]; // NULL-terminated string
+	struct SMessage base;
+	part_id_t source_part_id;
+	char data[];  // NULL-terminated string
 };
 
 struct SMsgAudio {
@@ -105,7 +106,10 @@ struct SMessage* message_alloc(size_t size);
 struct SMessage* message_alloc2(size_t size, enum SMsgType type);
 void message_free(struct SMessage** msg);
 
-struct SMessage* message_invite_alloc(conf_id_t conf_id, part_id_t part_id, const char* part_name);
+struct SMessage* message_invite_alloc(conf_id_t conf_id,
+                                      timestamp_t conf_start_ts,
+                                      part_id_t part_id,
+                                      const char* part_name);
 struct SMessage* message_invite_accept_alloc(part_id_t id, const char* name, struct SEndpoint* ep);
 struct SMessage* message_invite_reject_alloc(void);
 

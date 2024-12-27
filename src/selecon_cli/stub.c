@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "stub.h"
 
 #include <errno.h>
@@ -17,6 +19,7 @@
 #include <unistd.h>
 
 #include "selecon.h"
+#include "stime.h"
 
 struct Stub {
 	bool close_requested;
@@ -106,7 +109,10 @@ static void stub_read_file(struct Stub* stub,
 		}
 		av_packet_unref(packet);
 		// realtime delay emulation
-		int64_t time_delta = av_rescale_q(ts_delta, a_stream->time_base, av_make_q(1, 1000000));
+		int64_t time_delta =
+		    av_rescale_q(ts_delta,
+		                 a_stream != NULL ? a_stream->time_base : v_stream->time_base,
+		                 av_make_q(1, 1000000));
 		usleep(time_delta);
 	}
 free_frames:
@@ -181,7 +187,13 @@ struct Stub* stub_create(struct SContext* context, const char* filename, void* (
 	stub->context     = context;
 	stub->filename    = strdup(filename);
 	pthread_mutex_init(&stub->mutex, NULL);
-	pthread_create(&stub->worker_thread, NULL, worker, stub);
+	if (pthread_create(&stub->worker_thread, NULL, worker, stub) != 0) {
+		pthread_mutex_destroy(&stub->mutex);
+		free(stub->filename);
+		free(stub);
+		return NULL;
+	}
+	pthread_setname_np(stub->worker_thread, "stub");
 	return stub;
 }
 

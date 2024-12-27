@@ -34,9 +34,7 @@ struct SMsgInvite;
 typedef bool (*invite_handler_fn_t)(struct SMsgInvite *invite);
 
 // recvd text message handling callback
-typedef void (*text_handler_fn_t)(void *user_data,
-                                  part_id_t part_id,
-                                  const char* text);
+typedef void (*text_handler_fn_t)(void *user_data, part_id_t part_id, const char *text);
 
 // recvd media data handling callback. Must initiate
 // defered work and quit as soon as possible

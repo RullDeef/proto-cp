@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "stream.h"
 
 #include <assert.h>
@@ -21,6 +23,7 @@
 #include "error.h"
 #include "media_filters.h"
 #include "participant.h"
+#include "stime.h"
 #include "stypes.h"
 
 static int init_recursive_mutex(pthread_mutex_t *mutex) {
@@ -53,7 +56,7 @@ static void insert_frame(struct SStream *stream, struct AVFrame **frame) {
 	} else {
 		sframe->avframe = *frame;
 		insert_common(stream, sframe);
-    *frame = NULL;
+		*frame = NULL;
 	}
 }
 
@@ -66,7 +69,7 @@ static void insert_packet(struct SStream *stream, struct AVPacket **packet) {
 	} else {
 		sframe->avpacket = *packet;
 		insert_common(stream, sframe);
-    *packet = NULL;
+		*packet = NULL;
 	}
 }
 
@@ -115,11 +118,11 @@ static void stream_input_worker(struct SStream *stream) {
 	struct AVFrame *frame = av_frame_alloc();
 	enum AVMediaType mtype =
 	    stream->type == SSTREAM_AUDIO ? AVMEDIA_TYPE_AUDIO : AVMEDIA_TYPE_VIDEO;
-  // TODO: flush decoder properly
-  struct AVPacket *packet = NULL;
+	// TODO: flush decoder properly
+	struct AVPacket *packet = NULL;
 	do {
-    av_packet_free(&packet);
-		packet = pop_packet(stream);
+		av_packet_free(&packet);
+		packet  = pop_packet(stream);
 		int ret = avcodec_send_packet(stream->codec_ctx, packet);
 		if (ret < 0) {
 			perror("avcodec_send_packet");
@@ -140,14 +143,15 @@ static void stream_input_worker(struct SStream *stream) {
 				pts += frame->nb_samples;  // time is in 1/sample_rate units
 			}
 			stream->media_handler(stream->media_user_data, stream->part_id, mtype, frame);
-      av_frame_unref(frame);
+			av_frame_unref(frame);
 		}
 	} while (packet != NULL);
-  av_frame_free(&frame);
+	av_frame_free(&frame);
 }
 
 static void stream_output_worker(struct SStream *stream) {
 	struct AVPacket *packet = av_packet_alloc();
+	timestamp_t ts          = 0;
 	while (true) {
 		struct AVFrame *frame = pop_frame(stream);
 		if (frame == NULL) {  // close requested
@@ -160,6 +164,22 @@ static void stream_output_worker(struct SStream *stream) {
 			continue;
 		}
 		while ((ret = mfgraph_receive(&stream->filter_graph, frame)) >= 0) {
+			if (frame != NULL) {
+				assert(stream->codec_ctx->time_base.num != 0);
+				frame->time_base = stream->codec_ctx->time_base;
+				frame->pts       = av_rescale_q(get_curr_timestamp() - stream->start_ts,
+                                          av_make_q(1, 1000000000),
+                                          frame->time_base);
+				frame->pkt_dts   = frame->pts;
+			}
+			// reduce processing rate
+			timestamp_t expected_delta = 0;
+			if (frame->nb_samples > 0)
+				expected_delta = av_rescale(frame->nb_samples, 1000000000LL, frame->sample_rate);
+			else
+				expected_delta = 1000000000LL / SELECON_DEFAULT_VIDEO_FPS;
+			// TODO: make ptses smoother (introduce some delay)
+			reduce_fps(expected_delta, &ts);
 			int ret = avcodec_send_frame(stream->codec_ctx, frame);
 			if (ret < 0) {
 				fprintf(stderr, "avcodec_send_frame: ret = %d\n", ret);
@@ -176,12 +196,12 @@ static void stream_output_worker(struct SStream *stream) {
 					break;
 				}
 				stream->packet_handler(stream->packet_user_data, stream, packet);
-        av_packet_unref(packet);
+				av_packet_unref(packet);
 			}
 		}
 		if (ret != AVERROR(EAGAIN))
 			fprintf(stderr, "mfgraph_receive: err = %d\n", ret);
-    av_frame_free(&frame);
+		av_frame_free(&frame);
 	}
 }
 
@@ -224,13 +244,15 @@ static void stream_dump(FILE *fp, struct SStream *stream) {
 	for (struct SFrame *f = stream->queue; f != NULL; f = f->next) queue_len++;
 	if (stream->dir == SSTREAM_INPUT)
 		fprintf(fp,
-		        "{part=%llu %s queued %d packets}\n",
+		        "{part=%llu ts=%llu %s queued %d packets}\n",
 		        stream->part_id,
+		        stream->start_ts,
 		        stream->type == SSTREAM_AUDIO ? "audio" : "video",
 		        queue_len);
 	else
 		fprintf(fp,
-		        "{%s queued %d frames}\n",
+		        "{ts=%llu %s queued %d frames}\n",
+		        stream->start_ts,
 		        stream->type == SSTREAM_AUDIO ? "audio" : "video",
 		        queue_len);
 	pthread_mutex_unlock(&stream->mutex);
@@ -342,6 +364,8 @@ static sstream_id_t sstream_create(struct SStreamContainer *cont,
 	init_recursive_mutex(&stream->mutex);
 	pthread_cond_init(&stream->cond, NULL);
 	pthread_create(&stream->handler_thread, NULL, stream_worker, stream);
+	// TODO: pthread_create ret code check
+	pthread_setname_np(stream->handler_thread, "stream");
 	return stream;
 codec_err:
 	free(stream);
@@ -364,12 +388,14 @@ static void insert_stream(struct SStreamContainer *cont, struct SStream *stream)
 
 sstream_id_t scont_alloc_stream(struct SStreamContainer *cont,
                                 part_id_t part_id,
+                                timestamp_t start_ts,
                                 enum SStreamType type,
                                 enum SStreamDirection dir) {
 	struct SStream *stream = sstream_create(cont, type, dir);
 	if (stream == NULL)
 		return stream;
-	stream->part_id = part_id;
+	stream->part_id  = part_id;
+	stream->start_ts = start_ts;
 	if (dir == SSTREAM_INPUT) {
 		stream->media_handler   = cont->media_handler;
 		stream->media_user_data = cont->user_data;

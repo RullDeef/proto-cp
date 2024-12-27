@@ -62,6 +62,6 @@ void selecon_endpoint_dump(FILE *fd, struct SEndpoint *ep) {
 			fprintf(fd, "%s:%d", buf, ep->ipv6.sin6_port);
 			break;
 		case AF_UNIX: fprintf(fd, "file://%s", ep->un.sun_path); break;
-		default:      fprintf(fd, "unknown");
+		default: fprintf(fd, "unknown");
 	}
 }

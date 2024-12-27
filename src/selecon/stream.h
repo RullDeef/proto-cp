@@ -37,6 +37,9 @@ struct SStream {
 	enum SStreamDirection dir;
 	part_id_t part_id;
 
+	// conference start timestamp
+	timestamp_t start_ts;
+
 	// callback valid for input streams. Called for each received media frame
 	media_handler_fn_t media_handler;
 	void *media_user_data;
@@ -90,6 +93,7 @@ void scont_dump(FILE *fp, struct SStreamContainer *cont);
 
 sstream_id_t scont_alloc_stream(struct SStreamContainer *cont,
                                 part_id_t part_id,
+                                timestamp_t start_ts,
                                 enum SStreamType type,
                                 enum SStreamDirection dir);
 
