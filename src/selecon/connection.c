@@ -1,11 +1,17 @@
 #include "connection.h"
 
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/poll.h>
 #include <unistd.h>
 
+#include "cert.h"
 #include "config.h"
 #include "endpoint.h"
 #include "message.h"
@@ -14,7 +20,49 @@ struct SConnection {
 	int fd;
 	struct SEndpoint src_ep;
 	struct SEndpoint dst_ep;
+
+	// if ssl is NULL - connection is raw and not secured
+	SSL *ssl;
+	SSL_CTX *ssl_ctx;
 };
+
+static atomic_int ssl_usage_counter = 0;
+
+static void ssl_init(void) {
+	if (atomic_fetch_add(&ssl_usage_counter, 1) == 0) {
+		SSL_load_error_strings();
+		OpenSSL_add_all_algorithms();
+	}
+}
+
+static void ssl_destroy(void) {
+	if (atomic_fetch_add(&ssl_usage_counter, -1) == 1) {
+		ERR_free_strings();
+		EVP_cleanup();
+	}
+}
+
+static SSL_CTX *ssl_new_server_ctx(void) {
+	const char *cert = cert_get_cert_path();
+	const char *key  = cert_get_key_path();
+	if (cert == NULL || key == NULL)
+		return NULL;
+	SSL_CTX *ctx = SSL_CTX_new(SSLv23_server_method());
+	if (SSL_CTX_use_certificate_file(ctx, cert, SSL_FILETYPE_PEM) > 0) {
+		if (SSL_CTX_use_PrivateKey_file(ctx, key, SSL_FILETYPE_PEM) > 0) {
+			return ctx;
+		}
+	}
+	SSL_CTX_free(ctx);
+	return NULL;
+}
+
+static SSL_CTX *ssl_new_client_ctx(void) {
+	SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+	SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+	return ctx;
+}
 
 void sconn_dump(FILE *fd, struct SConnection *con) {
 	if (fd == NULL || con == NULL)
@@ -74,6 +122,24 @@ enum SError sconn_accept(struct SConnection *con, struct SConnection **out_con, 
 	return SELECON_OK;
 }
 
+enum SError sconn_accept_secure(struct SConnection *con,
+                                struct SConnection **out_con,
+                                int timeout_ms) {
+	enum SError err = sconn_accept(con, out_con, timeout_ms);
+	if (err != SELECON_OK)
+		return err;
+	ssl_init();
+	if (((*out_con)->ssl_ctx = ssl_new_server_ctx()) != NULL) {
+		(*out_con)->ssl = SSL_new((*out_con)->ssl_ctx);
+		SSL_set_fd((*out_con)->ssl, (*out_con)->fd);
+		if (SSL_accept((*out_con)->ssl) > 0)
+			return SELECON_OK;
+	}
+	ERR_print_errors_fp(stderr);
+	sconn_disconnect(out_con);
+	return SELECON_SSL_ERROR;
+}
+
 enum SError sconn_connect(struct SConnection **con, struct SEndpoint *ep) {
 	if (con == NULL || ep == NULL)
 		return SELECON_INVALID_ARG;
@@ -100,9 +166,33 @@ socket_err:
 	return SELECON_CON_ERROR;
 }
 
+enum SError sconn_connect_secure(struct SConnection **con, struct SEndpoint *ep) {
+	enum SError err = sconn_connect(con, ep);
+	if (err != SELECON_OK)
+		return err;
+	ssl_init();
+	if (((*con)->ssl_ctx = ssl_new_client_ctx()) != NULL) {
+		(*con)->ssl = SSL_new((*con)->ssl_ctx);
+		SSL_set_fd((*con)->ssl, (*con)->fd);
+		if (SSL_connect((*con)->ssl) > 0)
+			return SELECON_OK;
+	}
+	ERR_print_errors_fp(stderr);
+	sconn_disconnect(con);
+	return SELECON_SSL_ERROR;
+}
+
 enum SError sconn_disconnect(struct SConnection **con) {
 	if (con == NULL || *con == NULL)
 		return SELECON_INVALID_ARG;
+	if ((*con)->ssl_ctx != NULL) {
+		if ((*con)->ssl != NULL) {
+			SSL_shutdown((*con)->ssl);
+			SSL_free((*con)->ssl);
+		}
+		SSL_CTX_free((*con)->ssl_ctx);
+		ssl_destroy();
+	}
 	close((*con)->fd);
 	free(*con);
 	*con = NULL;
@@ -112,33 +202,51 @@ enum SError sconn_disconnect(struct SConnection **con) {
 enum SError sconn_send(struct SConnection *con, struct SMessage *msg) {
 	if (con == NULL || msg == NULL)
 		return SELECON_INVALID_ARG;
-	if (send(con->fd, msg, msg->size, 0) == -1) {
-		perror("send");
-		return SELECON_CON_ERROR;
+	if (con->ssl != NULL) {
+		if (SSL_write(con->ssl, msg, msg->size) == -1) {
+			ERR_print_errors_fp(stderr);
+			return SELECON_CON_ERROR;
+		}
+	} else {
+		if (send(con->fd, msg, msg->size, 0) == -1) {
+			perror("send");
+			return SELECON_CON_ERROR;
+		}
 	}
 	return SELECON_OK;
+}
+
+static int sconn_recv_part(struct SConnection *con, void *buffer, size_t size) {
+	int ret = 0;
+	if (con->ssl != NULL) {
+		ret = SSL_read(con->ssl, buffer, size);
+		if (ret == -1)
+			ERR_print_errors_fp(stderr);
+	} else {
+		ret = recv(con->fd, buffer, size, 0);
+		if (ret == -1)
+			perror("recv");
+	}
+	return ret;
 }
 
 enum SError sconn_recv(struct SConnection *con, struct SMessage **msg) {
 	if (con == NULL || msg == NULL)
 		return SELECON_INVALID_ARG;
 	size_t size = 0;
-	int ret     = recv(con->fd, &size, sizeof(size_t), 0);
-	if (ret == -1) {
-		perror("recv");
+	int ret     = sconn_recv_part(con, &size, sizeof(size_t));
+	if (ret == -1)
 		return SELECON_CON_ERROR;
-	} else if (ret == 0) {
+	else if (ret == 0)
 		return SELECON_CON_HANGUP;
-	}
 	if (*msg == NULL || (*msg)->size < size) {
 		message_free(msg);
 		*msg = message_alloc(size);
 	}
-	ret = recv(con->fd, &(*msg)->type, size - sizeof(size), 0);
-	if (ret == -1) {
-		perror("recv");
+	ret = sconn_recv_part(con, &(*msg)->type, size - sizeof(size));
+	if (ret == -1)
 		return SELECON_CON_ERROR;
-	} else if (ret != size - sizeof(size)) {
+	else if (ret != size - sizeof(size)) {
 		message_free(msg);
 		return SELECON_CON_ERROR;
 	}

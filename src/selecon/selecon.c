@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "avutility.h"
+#include "cert.h"
 #include "config.h"
 #include "connection.h"
 #include "context.h"
@@ -271,7 +272,7 @@ static void *invite_worker(void *arg) {
 	enum SError err                = sconn_listen(&listen_con, &ctx->listen_ep);
 	while (ctx->initialized && (err == SELECON_OK || err == SELECON_CON_TIMEOUT)) {
 		struct SConnection *part_con = NULL;
-		err                          = sconn_accept(listen_con, &part_con, 5000);
+		err                          = sconn_accept_secure(listen_con, &part_con, 5000);
 		if (err == SELECON_OK) {
 			struct SMsgInvite *invite = NULL;
 			err                       = do_handshake_srv(
@@ -328,6 +329,7 @@ enum SError selecon_context_init(struct SContext *ctx,
                                  invite_handler_fn_t invite_handler,
                                  text_handler_fn_t text_handler,
                                  media_handler_fn_t media_handler) {
+	cert_init();
 	register_media_profiles();
 	if (ctx == NULL)
 		return SELECON_INVALID_ARG;
@@ -448,7 +450,7 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 		return err;
 	}
 	struct SConnection *con = NULL;
-	err                     = sconn_connect(&con, ep);
+	err                     = sconn_connect_secure(&con, ep);
 	if (err != SELECON_OK) {
 		scont_close_stream(&context->streams, &video_stream);
 		scont_close_stream(&context->streams, &audio_stream);

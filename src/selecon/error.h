@@ -20,6 +20,7 @@ enum SError {
 	SELECON_INVALID_STREAM,
 	SELECON_NOT_IMPLEMENTED,
 	SELECON_AVERROR,
+	SELECON_SSL_ERROR,
 };
 
 const char* serror_str(enum SError err);

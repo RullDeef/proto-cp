@@ -18,8 +18,17 @@ enum SError sconn_listen(struct SConnection **con, struct SEndpoint *ep);
 // blocks caller until either connection accepted or timed out
 enum SError sconn_accept(struct SConnection *con, struct SConnection **out_con, int timeout_ms);
 
+// blocks caller until either connection accepted or timed out. Accept connection with forceful SSL
+// setup. Other side must call sconn_connect_secure
+enum SError sconn_accept_secure(struct SConnection *con,
+                                struct SConnection **out_con,
+                                int timeout_ms);
+
 // allocates and opens connection to given endpoint
 enum SError sconn_connect(struct SConnection **con, struct SEndpoint *ep);
+
+// allocates and opens connection to given endpoint. Requires SSL setup on other side as well
+enum SError sconn_connect_secure(struct SConnection **con, struct SEndpoint *ep);
 
 // closes connection and frees all allocated resources
 enum SError sconn_disconnect(struct SConnection **con);

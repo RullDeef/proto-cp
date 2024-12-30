@@ -30,6 +30,8 @@ pkg_check_modules(libav REQUIRED IMPORTED_TARGET
     libavutil
 )
 
+find_package(OpenSSL REQUIRED)
+
 file(GLOB SELECON_LIB_SOURCES src/selecon/*.c)
 file(GLOB CLI_SOURCES src/selecon_cli/*.c)
 file(GLOB TEST_SOURCES src/tests/*.cpp)
@@ -37,6 +39,7 @@ file(GLOB TEST_SOURCES src/tests/*.cpp)
 add_library(selecon ${SELECON_LIB_SOURCES})
 target_include_directories(selecon INTERFACE src/selecon)
 target_link_libraries(selecon PUBLIC avutil avformat avcodec avfilter)
+target_link_libraries(selecon PRIVATE OpenSSL::Crypto ssl)
 
 add_executable(selecon_cli ${CLI_SOURCES})
 target_link_libraries(selecon_cli selecon avdevice)

@@ -16,6 +16,7 @@ const char* serror_str(enum SError err) {
 		case SELECON_INVALID_STREAM: return "invalid stream";
 		case SELECON_NOT_IMPLEMENTED: return "not implemented";
 		case SELECON_AVERROR: return "av error";
+		case SELECON_SSL_ERROR: return "SSL error";
 		case SELECON_UNEXPECTED_MSG_TYPE:
 			return "unexpected message type";
 			// default: return "unknown error";
