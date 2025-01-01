@@ -150,9 +150,6 @@ enum SError sconn_connect(struct SConnection **con, struct SEndpoint *ep) {
 		perror("socket");
 		goto socket_err;
 	}
-	printf("inviting to ");
-	selecon_endpoint_dump(stdout, ep);
-	printf("\n");
 	if (connect((*con)->fd, &(*con)->dst_ep.addr, (*con)->dst_ep.addr_len) != 0) {
 		perror("connect");
 		goto con_err;
@@ -187,7 +184,7 @@ enum SError sconn_disconnect(struct SConnection **con) {
 		return SELECON_INVALID_ARG;
 	if ((*con)->ssl_ctx != NULL) {
 		if ((*con)->ssl != NULL) {
-			SSL_shutdown((*con)->ssl);
+			SSL_shutdown((*con)->ssl);  // TODO: solve EPIPE here (p2p reject test)
 			SSL_free((*con)->ssl);
 		}
 		SSL_CTX_free((*con)->ssl_ctx);
@@ -237,8 +234,16 @@ enum SError sconn_recv(struct SConnection *con, struct SMessage **msg) {
 	int ret     = sconn_recv_part(con, &size, sizeof(size_t));
 	if (ret == -1)
 		return SELECON_CON_ERROR;
-	else if (ret == 0)
+	else if (ret == 0) {
+		// close ssl connection if any
+		if (con->ssl != NULL) {
+			SSL_free(con->ssl);
+			con->ssl = NULL;
+			SSL_CTX_free(con->ssl_ctx);
+			con->ssl_ctx = NULL;
+		}
 		return SELECON_CON_HANGUP;
+	}
 	if (*msg == NULL || (*msg)->size < size) {
 		message_free(msg);
 		*msg = message_alloc(size);
@@ -275,6 +280,12 @@ enum SError sconn_recv_one(struct SConnection **cons,
 		if (pollfd[i].revents & POLLHUP) {
 			// participant disconnected
 			*ready_index = i;
+			if (cons[i]->ssl != NULL) {
+				SSL_free(cons[i]->ssl);
+				cons[i]->ssl = NULL;
+				SSL_CTX_free(cons[i]->ssl_ctx);
+				cons[i]->ssl_ctx = NULL;
+			}
 			return SELECON_CON_HANGUP;
 		} else if (pollfd[i].revents & POLLIN) {
 			*ready_index = i;

@@ -145,12 +145,8 @@ static void stream_input_worker(struct SStream *stream) {
 		}
 		while (ret == 0) {
 			ret = avcodec_receive_frame(stream->codec_ctx, frame);
-			if (ret == AVERROR(EAGAIN))
+			if (ret < 0)
 				break;
-			else if (ret < 0) {
-				perror("avcodec_receive_packet");
-				break;
-			}
 			frame->time_base = stream->codec_ctx->time_base;
 			if (mtype == AVMEDIA_TYPE_AUDIO) {
 				frame->pts = frame->pkt_dts = pts;
@@ -159,6 +155,9 @@ static void stream_input_worker(struct SStream *stream) {
 			stream->media_handler(stream->media_user_data, stream->part_id, mtype, frame);
 			av_frame_unref(frame);
 		}
+		if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
+			perror("avcodec_receive_packet");
+
 	} while (packet != NULL);
 	av_frame_free(&frame);
 }
@@ -206,12 +205,13 @@ static void stream_output_worker(struct SStream *stream) {
 				if (ret == AVERROR(EAGAIN))
 					break;
 				else if (ret < 0) {
-					perror("avcodec_receive_packet");
 					break;
 				}
 				stream->packet_handler(stream->packet_user_data, stream, packet);
 				av_packet_unref(packet);
 			}
+			if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
+				perror("avcodec_receive_packet");
 		}
 		if (ret != AVERROR(EAGAIN))
 			fprintf(stderr, "mfgraph_receive: err = %d\n", ret);

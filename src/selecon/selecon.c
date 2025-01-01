@@ -142,14 +142,25 @@ static void handle_part_presence_message(struct SContext *ctx,
 	for (size_t i = 0; i < msg->count; ++i) {
 		if (msg->states[i].state == PART_JOIN) {
 			// meet with newbe using invite
-			enum SError err = selecon_invite(ctx, &msg->states[i].ep);
-			if (err != SELECON_OK)
-				printf("failed to meet participant %llu: %s\n", msg->states[i].id, serror_str(err));
-		} else if (msg->states[i].state == PART_LEAVE) {
-			// disconnect from participant
-			printf("removed participant %llu\n", ctx->participants[part_index].id);
+			bool part_is_new = true;
+			pthread_rwlock_rdlock(&ctx->part_rwlock);
+			for (size_t j = 0; j < ctx->nb_participants - 1; ++j) {
+				if (ctx->participants[j].id == msg->states[i].id) {
+					part_is_new = false;
+					break;
+				}
+			}
+			pthread_rwlock_unlock(&ctx->part_rwlock);
+			if (part_is_new) {
+				enum SError err = selecon_invite(ctx, &msg->states[i].ep);
+				if (err != SELECON_OK)
+					fprintf(stderr,
+					        "failed to meet participant %llu: %s\n",
+					        msg->states[i].id,
+					        serror_str(err));
+			}
+		} else if (msg->states[i].state == PART_LEAVE)
 			remove_participant(ctx, part_index);
-		}
 	}
 }
 
@@ -240,7 +251,6 @@ static void *conf_worker(void *arg) {
 	struct SMessage *msg = NULL;
 	size_t index         = 0;
 	enum SError err      = SELECON_OK;
-	printf("started conf worker!\n");
 	while (ctx->initialized && ctx->nb_participants > 1 &&
 	       (err == SELECON_OK || err == SELECON_CON_TIMEOUT)) {
 		if (cons_count != ctx->nb_participants - 1) {
@@ -260,10 +270,48 @@ static void *conf_worker(void *arg) {
 		if (err == SELECON_OK)
 			handle_message(ctx, index, msg);
 	}
-	printf("conf worker stopped\n");
 	message_free(&msg);
 	free(cons);
 	return NULL;
+}
+
+static enum SError handle_invite(struct SContext *ctx,
+                                 struct SConnection *con,
+                                 struct SMsgInvite *invite) {
+	if (ctx->conf_id != invite->conf_id) {
+		selecon_leave_conference(ctx);  // leave old conference
+		ctx->conf_id       = invite->conf_id;
+		ctx->conf_start_ts = invite->conf_start_ts;
+	}
+	sstream_id_t audio_stream = NULL;
+	sstream_id_t video_stream = NULL;
+	enum SError err           = scont_alloc_stream(&ctx->streams,
+                                         invite->part_id,
+                                         ctx->conf_start_ts,
+                                         SSTREAM_AUDIO,
+                                         SSTREAM_INPUT,
+                                         &audio_stream);
+	if (err != SELECON_OK)
+		return err;
+	err = scont_alloc_stream(&ctx->streams,
+	                         invite->part_id,
+	                         ctx->conf_start_ts,
+	                         SSTREAM_VIDEO,
+	                         SSTREAM_INPUT,
+	                         &video_stream);
+	if (err != SELECON_OK) {
+		scont_close_stream(&ctx->streams, &audio_stream);
+		return err;
+	}
+	pthread_rwlock_wrlock(&ctx->part_rwlock);
+	add_participant(ctx, invite->part_id, invite->part_name, con);
+	if (ctx->nb_participants == 2 && !ctx->conf_thread_working) {
+		// TODO: memory check
+		pthread_create(&ctx->conf_thread, NULL, conf_worker, ctx);
+		pthread_setname_np(ctx->conf_thread, "conf");
+	}
+	pthread_rwlock_unlock(&ctx->part_rwlock);
+	return SELECON_OK;
 }
 
 static void *invite_worker(void *arg) {
@@ -271,51 +319,16 @@ static void *invite_worker(void *arg) {
 	struct SConnection *listen_con = NULL;
 	enum SError err                = sconn_listen(&listen_con, &ctx->listen_ep);
 	while (ctx->initialized && (err == SELECON_OK || err == SELECON_CON_TIMEOUT)) {
-		struct SConnection *part_con = NULL;
-		err                          = sconn_accept_secure(listen_con, &part_con, 5000);
+		struct SConnection *con = NULL;
+		err                     = sconn_accept_secure(listen_con, &con, 5000);
 		if (err == SELECON_OK) {
 			struct SMsgInvite *invite = NULL;
-			err                       = do_handshake_srv(
-                &ctx->self, &ctx->listen_ep, part_con, &invite, ctx->invite_handler);
+			err = do_handshake_srv(&ctx->self, &ctx->listen_ep, con, &invite, ctx->invite_handler);
+			if (err == SELECON_OK && invite != NULL)
+				err = handle_invite(ctx, con, invite);
 			if (err != SELECON_OK || invite == NULL)
-				sconn_disconnect(&part_con);
-			else {
-#ifndef NDEBUG
-				printf("successful handshake con = ");
-				sconn_dump(stdout, part_con);
-				printf("\n");
-#endif
-				if (ctx->conf_id != invite->conf_id) {
-					selecon_leave_conference(ctx);  // leave old conference
-					ctx->conf_id       = invite->conf_id;
-					ctx->conf_start_ts = invite->conf_start_ts;
-				}
-				pthread_rwlock_wrlock(&ctx->part_rwlock);
-				add_participant(ctx, invite->part_id, invite->part_name, part_con);
-				sstream_id_t audio_stream = NULL;
-				sstream_id_t video_stream = NULL;
-				enum SError err           = scont_alloc_stream(&ctx->streams,
-                                                     invite->part_id,
-                                                     ctx->conf_start_ts,
-                                                     SSTREAM_AUDIO,
-                                                     SSTREAM_INPUT,
-                                                     &audio_stream);
-				assert(err == SELECON_OK);
-				err = scont_alloc_stream(&ctx->streams,
-				                         invite->part_id,
-				                         ctx->conf_start_ts,
-				                         SSTREAM_VIDEO,
-				                         SSTREAM_INPUT,
-				                         &video_stream);
-				assert(err == SELECON_OK);
-				pthread_rwlock_unlock(&ctx->part_rwlock);
-				if (ctx->nb_participants == 2 && !ctx->conf_thread_working) {
-					// TODO: memory check
-					pthread_create(&ctx->conf_thread, NULL, conf_worker, ctx);
-					pthread_setname_np(ctx->conf_thread, "conf");
-				}
-				message_free((struct SMessage **)&invite);
-			}
+				sconn_disconnect(&con);
+			message_free((struct SMessage **)&invite);
 		}
 	}
 	sconn_disconnect(&listen_con);
@@ -341,7 +354,6 @@ enum SError selecon_context_init(struct SContext *ctx,
 		    &default_ep, SELECON_DEFAULT_LISTEN_ADDR, SELECON_DEFAULT_LISTEN_PORT);
 		ep = &default_ep;
 	}
-	srand(time(NULL));
 	ctx->conf_id       = rand();
 	ctx->conf_start_ts = get_curr_timestamp();
 	int ret            = pthread_rwlock_init(&ctx->part_rwlock, NULL);
@@ -431,6 +443,38 @@ bool selecon_reject_any(struct SMsgInvite *invite) {
 	return false;
 }
 
+static enum SError invite_connected(struct SContext *context,
+                                    struct SConnection *con,
+                                    part_id_t *out_part_id) {
+	struct SMessage *inviteMsg = message_invite_alloc(
+	    context->conf_id, context->conf_start_ts, context->self.id, context->self.name);
+	struct SMsgInviteAccept *acceptMsg = NULL;
+	enum SError err                    = do_handshake_client(con, inviteMsg, &acceptMsg);
+	if (err != SELECON_OK || acceptMsg == NULL)
+		return err;
+	// send other participants info about invitee
+	struct SMsgPartPresence *msg = message_part_presence_alloc(1);
+	msg->states[0].id            = acceptMsg->id;
+	msg->states[0].ep            = acceptMsg->ep;
+	msg->states[0].role          = SROLE_CLIENT;
+	msg->states[0].state         = PART_JOIN;
+	pthread_rwlock_wrlock(&context->part_rwlock);
+	for (size_t i = 0; i < context->nb_participants - 1; ++i)
+		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
+	add_participant(context, acceptMsg->id, acceptMsg->name, con);
+	if (context->nb_participants == 2 && !context->conf_thread_working) {
+		if (pthread_create(&context->conf_thread, NULL, conf_worker, context) != 0)
+			exit(-1);  // TODO: leave conference? kick invited participant? what to do here
+			           // actually??
+		pthread_setname_np(context->conf_thread, "conf");
+	}
+	pthread_rwlock_unlock(&context->part_rwlock);
+	*out_part_id = acceptMsg->id;
+	message_free((struct SMessage **)&msg);
+	message_free((struct SMessage **)&acceptMsg);
+	return SELECON_OK;
+}
+
 enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 	if (context == NULL || ep == NULL)
 		return SELECON_INVALID_ARG;
@@ -445,61 +489,31 @@ enum SError selecon_invite(struct SContext *context, struct SEndpoint *ep) {
 	sstream_id_t video_stream = NULL;
 	err                       = scont_alloc_stream(
         &context->streams, -1, context->conf_start_ts, SSTREAM_VIDEO, SSTREAM_INPUT, &video_stream);
-	if (err != SELECON_OK) {
-		scont_close_stream(&context->streams, &audio_stream);
-		return err;
-	}
+	if (err != SELECON_OK)
+		goto stream_alloc_failed;
 	struct SConnection *con = NULL;
 	err                     = sconn_connect_secure(&con, ep);
-	if (err != SELECON_OK) {
-		scont_close_stream(&context->streams, &video_stream);
-		scont_close_stream(&context->streams, &audio_stream);
-		return err;
-	}
-	struct SMessage *inviteMsg = message_invite_alloc(
-	    context->conf_id, context->conf_start_ts, context->self.id, context->self.name);
-	struct SMsgInviteAccept *acceptMsg = NULL;
-	err                                = do_handshake_client(con, inviteMsg, &acceptMsg);
-	if (err != SELECON_OK || acceptMsg == NULL) {
-		sconn_disconnect(&con);
-		scont_close_stream(&context->streams, &video_stream);
-		scont_close_stream(&context->streams, &audio_stream);
-		return err;
-	}
-	printf("participant invited!\n");
-	// send other participants info about invitee
-	struct SMsgPartPresence *msg = message_part_presence_alloc(1);
-	pthread_rwlock_wrlock(&context->part_rwlock);
-	for (size_t i = 0; i < context->nb_participants - 1; ++i) {
-		printf("sending part presence msg to %s\n", context->participants[i].name);
-		msg->states[0].id    = acceptMsg->id;
-		msg->states[0].ep    = acceptMsg->ep;
-		msg->states[0].state = PART_JOIN;
-		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
-	}
-	add_participant(context, acceptMsg->id, acceptMsg->name, con);
-	pthread_rwlock_unlock(&context->part_rwlock);
-	audio_stream->part_id = acceptMsg->id;
-	video_stream->part_id = acceptMsg->id;
-	message_free((struct SMessage **)&msg);
-	message_free((struct SMessage **)&acceptMsg);
-	if (context->nb_participants == 2 && !context->conf_thread_working) {
-		// start conf worker
-		int perr = pthread_create(&context->conf_thread, NULL, conf_worker, context);
-		if (perr != 0) {
-			scont_close_stream(&context->streams, &video_stream);
-			scont_close_stream(&context->streams, &audio_stream);
-			// TODO: leave conference? kick invited participant? what to do here actually??
-			return SELECON_PTHREAD_ERROR;
-		}
-		pthread_setname_np(context->conf_thread, "conf");
-	}
+	if (err != SELECON_OK)
+		goto connect_failed;
+	part_id_t part_id = 0;
+	err               = invite_connected(context, con, &part_id);
+	if (err != SELECON_OK)
+		goto invite_failed;
+	audio_stream->part_id = part_id;
+	video_stream->part_id = part_id;
 	return SELECON_OK;
+invite_failed:
+	sconn_disconnect(&con);
+connect_failed:
+	scont_close_stream(&context->streams, &video_stream);
+stream_alloc_failed:
+	scont_close_stream(&context->streams, &audio_stream);
+	return err;
 }
 
 enum SError selecon_invite2(struct SContext *context, const char *address) {
-	struct SEndpoint ep;
-	enum SError err = selecon_parse_endpoint2(&ep, address);
+	struct SEndpoint ep = {0};
+	enum SError err     = selecon_parse_endpoint2(&ep, address);
 	if (err == SELECON_OK)
 		err = selecon_invite(context, &ep);
 	return err;

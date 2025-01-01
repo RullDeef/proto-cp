@@ -13,17 +13,23 @@ extern "C" {
 static std::deque<std::pair<part_id_t, AVFrame*>> user1RcvQueue;
 static std::deque<std::pair<part_id_t, AVFrame*>> user2RcvQueue;
 
-void user1_rcv_handler(void* user_data, part_id_t part_id, AVMediaType mtype, AVFrame* frame) {
+static void user1_rcv_handler(void* user_data,
+                              part_id_t part_id,
+                              AVMediaType mtype,
+                              AVFrame* frame) {
 	frame = av_frame_clone(frame);
 	user1RcvQueue.push_back(std::make_pair(part_id, frame));
 }
 
-void user2_rcv_handler(void* user_data, part_id_t part_id, AVMediaType mtype, AVFrame* frame) {
+static void user2_rcv_handler(void* user_data,
+                              part_id_t part_id,
+                              AVMediaType mtype,
+                              AVFrame* frame) {
 	frame = av_frame_clone(frame);
 	user2RcvQueue.push_back(std::make_pair(part_id, frame));
 }
 
-AVFrame* create_audio_frame(double& time) {
+static AVFrame* create_audio_frame(double& time) {
 	AVFrame* frame     = av_frame_alloc();
 	frame->format      = SELECON_DEFAULT_AUDIO_SAMPLE_FMT;
 	frame->sample_rate = SELECON_DEFAULT_AUDIO_SAMPLE_RATE;

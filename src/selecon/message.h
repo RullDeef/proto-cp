@@ -73,6 +73,7 @@ struct SMsgPartPresence {
 	size_t count;  // amount of states[]
 	struct PartPresenceState {
 		part_id_t id;
+		enum SRole role;
 		struct SEndpoint ep;
 		enum PresenceState {
 			PART_JOIN,

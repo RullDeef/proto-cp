@@ -362,6 +362,7 @@ int main(int argc, char** argv) {
 			return -1;
 		}
 	}
+	srand(time(NULL));
 	avdevice_register_all();
 	show_devices();
 	dump_mapper = pdmap_create("dumps/");  // init media dumper

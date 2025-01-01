@@ -9,7 +9,6 @@
 #include "connection.h"
 
 static unsigned long long generate_id() {
-	srand(time(NULL));
 	return rand() % ULONG_MAX;
 }
 
