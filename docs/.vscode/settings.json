@@ -1,0 +1,17 @@
+{
+    "files.exclude": {
+        "**/*.aux": true,
+        "**/*.bbl": true,
+        "**/*.bcf": true,
+        "**/*.blg": true,
+        "**/*.fdb_latexmk": true,
+        "**/*.fls": true,
+        "**/*.out": true,
+        "**/*.log": true,
+        "**/*.run.xml": true,
+        "**/*.synctex.gz": true,
+        "**/*.toc": true
+    },
+    "plantuml.diagramsRoot": "inc/diag",
+    "plantuml.exportOutDir": "inc/diag"
+}

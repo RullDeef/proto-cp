@@ -1,0 +1,51 @@
+@startjson
+{
+  "size": "int",
+  "spec": [
+    {
+      "type": "INVITE",
+      "conf_id": "conf_id_t",
+	    "part_id": "part_id_t",
+	    "conf_start_ts": "timestamp_t",
+    	"part_name": "string"
+    },
+    {
+      "type": "INVITE_ACCEPT",
+      "id": "part_id_t",
+	    "ep": "Endpoint",
+  	  "name": "string"
+    },
+    {
+      "type": "INVITE_REJECT"
+    },
+    {
+      "type": "REENTER",
+      "conf_id": "conf_id_t",
+      "part_id": "part_id_t"
+    },
+    {
+      "type": "PART_PRESENCE",
+      "count": "size_t",
+      "states": {
+        "id": "part_id_t",
+        "role": "Role",
+        "ep": "Endpoint",
+        "state": [
+          "PART_JOIN",
+          "PART_LEAVE"
+        ]
+      }
+    },
+    {
+      "type": "AUDIO",
+	    "source": "part_id_t",
+	    "data": "raw bytes"
+    },
+    {
+      "type": "VIDEO",
+	    "source": "part_id_t",
+	    "data": "raw bytes"
+    }
+  ]
+}
+@endjson

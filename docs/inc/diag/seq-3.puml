@@ -1,0 +1,38 @@
+@startuml conf-3
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title Организация конференции\nдля трех и более участников
+
+box Участники конференции 123
+participant "Остальные участники" as C
+participant "Участник <<А>>" as A
+end box
+participant "Участник <<Б>>" as B
+
+== Приглашение очередного участника ==
+
+A -> B: <b>""INVITE""
+A <-- B: <b>""INVITE_ACCEPT""
+note right: ""conf_id"" = 123
+
+C <<- A: <b>""PART_PRESENCE""\npart_id = <<Б>>
+
+C -> B: <b>""INVITE""
+note left
+Участники посылают
+приглашение для <<Б>>
+end note
+
+C <-- B: <b>""INVITE_ACCEPT""
+
+== Обмен медиа данными ==
+
+...
+
+== Завершение конференции участником <<Б>> ==
+
+A <<- B: <b>""LEAVE""
+C <<- B: <b>""LEAVE""
+
+@enduml

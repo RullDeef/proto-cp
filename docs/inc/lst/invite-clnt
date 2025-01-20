@@ -1,0 +1,23 @@
+// handshake procesdure
+//
+// | step | client (inviter)  | server (invitee)  |
+// | :--- | :---------------- | :---------------- |
+// | 1    | sends invite msg  | recvs invite msg  |
+// | 2    |                   | decides accept    |
+// | 3    | recvs confirm msg | sends confirm msg |
+static enum SError do_handshake_client(struct SConnection *con,
+    struct SMessage *msg, struct SMsgInviteAccept **acceptMsg) {
+  enum SError err = sconn_send(con, msg);
+  if (err != SELECON_OK)
+    return err;
+  err = sconn_recv(con, &msg);
+  if (err != SELECON_OK)
+    message_free(&msg);
+  else if (msg->type == SMSG_INVITE_ACCEPT)
+    *acceptMsg = (struct SMsgInviteAccept *)msg;
+  else {
+    message_free(&msg);
+    err = SELECON_INVITE_REJECTED;
+  }
+  return err;
+}

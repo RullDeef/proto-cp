@@ -1,0 +1,22 @@
+static void *invite_worker(void *arg) {
+  struct SContext *ctx           = arg;
+  struct SConnection *listen_con = NULL;
+  enum SError err                = sconn_listen(&listen_con, &ctx->listen_ep);
+  while (ctx->initialized && (err == SELECON_OK || err == SELECON_CON_TIMEOUT)) {
+    struct SConnection *con = NULL;
+    err                     = sconn_accept_secure(listen_con, &con, SELECON_DEFAULT_SECURE_TIMEOUT);
+    if (err == SELECON_OK) {
+      struct SMsgInvite *invite = NULL;
+      err = do_handshake_srv(&ctx->self, &ctx->listen_ep, con, &invite, ctx->invite_handler);
+      if (err == SELECON_OK && invite != NULL)
+        err = handle_invite(ctx, con, invite);
+      if (err != SELECON_OK || invite == NULL)
+        sconn_disconnect(&con);
+      message_free((struct SMessage **)&invite);
+    }
+  }
+  sconn_disconnect(&listen_con);
+  if (ctx->initialized && err != SELECON_OK)
+    printf("listener error: %s\n", serror_str(err));
+  return NULL;
+}

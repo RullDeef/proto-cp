@@ -1,0 +1,46 @@
+@startuml conf-2
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title Организация конференции\nдля двух участников
+
+participant "Участник <<А>>" as A
+participant "Участник <<Б>>" as B
+
+note left of A: ""conf_id"" = 123
+/ note right of B: ""conf_id"" = 456
+
+== Запуск конференции ==
+
+A -> B: <b>""INVITE""
+A <-- B: <b>""INVITE_ACCEPT""
+note left: ""conf_id"" = 123
+note right: ""conf_id"" = 123
+
+== Обмен медиа данными ==
+
+opt
+
+loop обмен аудио пакетами 20мс
+A ->> B: <b>""AUDIO""
+A <<- B: <b>""AUDIO""
+end
+
+else
+
+loop обмен видео пакетами 33мс
+A ->> B: <b>""VIDEO""
+A <<- B: <b>""VIDEO""
+end
+
+end
+
+== Завершение конференции ==
+
+alt Завершение участником <<А>>
+  A ->> B: <b>""LEAVE""
+else Завершение участником <<Б>>
+  A <<- B: <b>""LEAVE""
+end
+
+@enduml

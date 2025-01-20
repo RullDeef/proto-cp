@@ -1,0 +1,330 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global}
+    \entry{rtp}{misc}{useauthor=false}
+      \name{author}{4}{}{%
+        {{hash=c520fc132510d84b39cdc7763de73842}{%
+           family={Schulzrinne},
+           familyi={S\bibinitperiod},
+           given={Henning},
+           giveni={H\bibinitperiod}}}%
+        {{hash=fc899913b13c6b4fca223f6930a882af}{%
+           family={Casner},
+           familyi={C\bibinitperiod},
+           given={Stephen\bibnamedelima L.},
+           giveni={S\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
+        {{hash=a57010710d96bbf9ff58322b08d0d4bd}{%
+           family={Frederick},
+           familyi={F\bibinitperiod},
+           given={Ron},
+           giveni={R\bibinitperiod}}}%
+        {{hash=2191d887ae31ebf1ef43a77dc25834c4}{%
+           family={Jacobson},
+           familyi={J\bibinitperiod},
+           given={Van},
+           giveni={V\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {RFC Editor}%
+      }
+      \strng{authorbibnamehash}{0150750bbb8cb68136503c10f12bbcd0}
+      \strng{authornamehash}{0150750bbb8cb68136503c10f12bbcd0}
+      \strng{authorfullhash}{dab2e0ec8ecf2834b892a165be5eecee}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{abstract}{This memorandum describes RTP, the real-time transport protocol. RTP provides end-to-end network transport functions suitable for applications transmitting real-time data, such as audio, video or simulation data, over multicast or unicast network services. RTP does not address resource reservation and does not guarantee quality-of- service for real-time services. The data transport is augmented by a control protocol (RTCP) to allow monitoring of the data delivery in a manner scalable to large multicast networks, and to provide minimal control and identification functionality. RTP and RTCP are designed to be independent of the underlying transport and network layers. The protocol supports the use of RTP-level translators and mixers. Most of the text in this memorandum is identical to RFC 1889 which it obsoletes. There are no changes in the packet formats on the wire, only changes to the rules and algorithms governing how the protocol is used. The biggest change is an enhancement to the scalable timer algorithm for calculating when to send RTCP packets in order to minimize transmission in excess of the intended rate when many participants join a session simultaneously. {[}STANDARDS-TRACK{]}}
+      \field{howpublished}{RFC 3550}
+      \field{month}{7}
+      \field{pagetotal}{104}
+      \field{series}{Request for Comments}
+      \field{title}{{RTP: A Transport Protocol for Real-Time Applications}}
+      \field{year}{2003}
+      \field{number}{3550}
+      \range{number}{1}
+      \verb{doi}
+      \verb 10.17487/RFC3550
+      \endverb
+      \verb{urlraw}
+      \verb https://www.rfc-editor.org/info/rfc3550
+      \endverb
+      \verb{url}
+      \verb https://www.rfc-editor.org/info/rfc3550
+      \endverb
+    \endentry
+    \entry{sip}{misc}{useauthor=false}
+      \name{author}{8}{}{%
+        {{hash=94977137113d97b761f02b07f7daa948}{%
+           family={Schooler},
+           familyi={S\bibinitperiod},
+           given={Eve},
+           giveni={E\bibinitperiod}}}%
+        {{hash=644f478601b58831ccd1039711f1eb6c}{%
+           family={Rosenberg},
+           familyi={R\bibinitperiod},
+           given={Jonathan},
+           giveni={J\bibinitperiod}}}%
+        {{hash=c520fc132510d84b39cdc7763de73842}{%
+           family={Schulzrinne},
+           familyi={S\bibinitperiod},
+           given={Henning},
+           giveni={H\bibinitperiod}}}%
+        {{hash=ab0a22ecc159e57f1eecfc0df1c4ac5e}{%
+           family={Johnston},
+           familyi={J\bibinitperiod},
+           given={Alan},
+           giveni={A\bibinitperiod}}}%
+        {{hash=03ff83153f7229944a82e8fcaadb253a}{%
+           family={Camarillo},
+           familyi={C\bibinitperiod},
+           given={Gonzalo},
+           giveni={G\bibinitperiod}}}%
+        {{hash=4c863193cf734ac0b1ce9298c2a6961d}{%
+           family={Peterson},
+           familyi={P\bibinitperiod},
+           given={Jon},
+           giveni={J\bibinitperiod}}}%
+        {{hash=7ae18b3626a494e9da47bde26bebec35}{%
+           family={Sparks},
+           familyi={S\bibinitperiod},
+           given={Robert},
+           giveni={R\bibinitperiod}}}%
+        {{hash=6bcbf395622f0d54ce54102fe3c5563d}{%
+           family={Handley},
+           familyi={H\bibinitperiod},
+           given={Mark\bibnamedelima J.},
+           giveni={M\bibinitperiod\bibinitdelim J\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {RFC Editor}%
+      }
+      \strng{authorbibnamehash}{6fdb095178d33bc789cd416071e44087}
+      \strng{authornamehash}{6fdb095178d33bc789cd416071e44087}
+      \strng{authorfullhash}{20d550e932b1f1b63ab72701bba69521}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labeltitlesource}{title}
+      \field{abstract}{This document describes Session Initiation Protocol (SIP), an application-layer control (signaling) protocol for creating, modifying, and terminating sessions with one or more participants. These sessions include Internet telephone calls, multimedia distribution, and multimedia conferences. {[}STANDARDS-TRACK{]}}
+      \field{howpublished}{RFC 3261}
+      \field{month}{7}
+      \field{pagetotal}{269}
+      \field{series}{Request for Comments}
+      \field{title}{{SIP: Session Initiation Protocol}}
+      \field{year}{2002}
+      \field{number}{3261}
+      \range{number}{1}
+      \verb{doi}
+      \verb 10.17487/RFC3261
+      \endverb
+      \verb{urlraw}
+      \verb https://www.rfc-editor.org/info/rfc3261
+      \endverb
+      \verb{url}
+      \verb https://www.rfc-editor.org/info/rfc3261
+      \endverb
+    \endentry
+    \entry{h323}{misc}{}
+      \name{author}{2}{}{%
+        {{hash=fc2356bbcbc213acd81329c8ecb20386}{%
+           family={Agboh},
+           familyi={A\bibinitperiod},
+           given={Charles},
+           giveni={C\bibinitperiod}}}%
+        {{hash=c520fc132510d84b39cdc7763de73842}{%
+           family={Schulzrinne},
+           familyi={S\bibinitperiod},
+           given={Henning},
+           giveni={H\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {RFC Editor}%
+      }
+      \strng{namehash}{f441c3085fee795e553be6074726c55d}
+      \strng{fullhash}{f441c3085fee795e553be6074726c55d}
+      \strng{bibnamehash}{f441c3085fee795e553be6074726c55d}
+      \strng{authorbibnamehash}{f441c3085fee795e553be6074726c55d}
+      \strng{authornamehash}{f441c3085fee795e553be6074726c55d}
+      \strng{authorfullhash}{f441c3085fee795e553be6074726c55d}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{This document describes the requirements for the logical entity known as the Session Initiation Protocol (SIP)-H.323 Interworking Function (SIP-H.323 IWF) that will allow the interworking between SIP and H.323. This memo provides information for the Internet community.}
+      \field{howpublished}{RFC 4123}
+      \field{month}{7}
+      \field{pagetotal}{16}
+      \field{series}{Request for Comments}
+      \field{title}{{Session Initiation Protocol (SIP)-H.323 Interworking Requirements}}
+      \field{year}{2005}
+      \field{number}{4123}
+      \range{number}{1}
+      \verb{doi}
+      \verb 10.17487/RFC4123
+      \endverb
+      \verb{urlraw}
+      \verb https://www.rfc-editor.org/info/rfc4123
+      \endverb
+      \verb{url}
+      \verb https://www.rfc-editor.org/info/rfc4123
+      \endverb
+    \endentry
+    \entry{openssl}{misc}{}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{[Электронный ресурс]}
+      \field{title}{OpenSSL --- \url{https://www.openssl.org/} (дата обращения: 10.12.2024)}
+    \endentry
+    \entry{aac}{misc}{useauthor=false}
+      \name{author}{5}{}{%
+        {{hash=3a9745c5f5f62c25d2ec92b2ccb47bba}{%
+           family={Matsui},
+           familyi={M\bibinitperiod},
+           given={Yoshinori},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=17a54d77e6e435c432b2cbb454d11293}{%
+           family={Kimata},
+           familyi={K\bibinitperiod},
+           given={Hideaki},
+           giveni={H\bibinitperiod}}}%
+        {{hash=4a07e96b0a1853f06afbb0c7c15afc4e}{%
+           family={Kikuchi},
+           familyi={K\bibinitperiod},
+           given={Yoshihiro},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=4bd5ffda66c1d552d933624ae7a8fd45}{%
+           family={Fukunaga},
+           familyi={F\bibinitperiod},
+           given={Shigeru},
+           giveni={S\bibinitperiod}}}%
+        {{hash=58b7fdfdc512094c7fe3468535e8981b}{%
+           family={Nomura},
+           familyi={N\bibinitperiod},
+           given={Toshiyuki},
+           giveni={T\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {RFC Editor}%
+      }
+      \strng{authorbibnamehash}{c3cc8e40016e9d5f9a96cc9c0920af49}
+      \strng{authornamehash}{c3cc8e40016e9d5f9a96cc9c0920af49}
+      \strng{authorfullhash}{910e3a58aaf721ebea84ff29b8adfd8f}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labeltitlesource}{title}
+      \field{abstract}{This document describes Real-Time Transport Protocol (RTP) payload formats for carrying each of MPEG-4 Audio and MPEG-4 Visual bitstreams without using MPEG-4 Systems. {[}STANDARDS-TRACK{]}}
+      \field{howpublished}{RFC 3016}
+      \field{month}{11}
+      \field{pagetotal}{21}
+      \field{series}{Request for Comments}
+      \field{title}{{RTP Payload Format for MPEG-4 Audio/Visual Streams}}
+      \field{year}{2000}
+      \field{number}{3016}
+      \range{number}{1}
+      \verb{doi}
+      \verb 10.17487/RFC3016
+      \endverb
+      \verb{urlraw}
+      \verb https://www.rfc-editor.org/info/rfc3016
+      \endverb
+      \verb{url}
+      \verb https://www.rfc-editor.org/info/rfc3016
+      \endverb
+    \endentry
+    \entry{h264}{misc}{}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{(Электронный ресурс)}
+      \field{title}{H.264: Advanced video coding for generic audiovisual services --- \url{https://www.itu.int/rec/T-REC-H.264} (дата обращения: 10.12.2024)}
+    \endentry
+    \entry{tls}{misc}{}
+      \name{author}{1}{}{%
+        {{hash=fbed942ce41bbd27cb1ee6a803bdf541}{%
+           family={Rescorla},
+           familyi={R\bibinitperiod},
+           given={Eric},
+           giveni={E\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {RFC Editor}%
+      }
+      \strng{namehash}{fbed942ce41bbd27cb1ee6a803bdf541}
+      \strng{fullhash}{fbed942ce41bbd27cb1ee6a803bdf541}
+      \strng{bibnamehash}{fbed942ce41bbd27cb1ee6a803bdf541}
+      \strng{authorbibnamehash}{fbed942ce41bbd27cb1ee6a803bdf541}
+      \strng{authornamehash}{fbed942ce41bbd27cb1ee6a803bdf541}
+      \strng{authorfullhash}{fbed942ce41bbd27cb1ee6a803bdf541}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{This document specifies version 1.3 of the Transport Layer Security (TLS) protocol. TLS allows client/server applications to communicate over the Internet in a way that is designed to prevent eavesdropping, tampering, and message forgery. This document updates RFCs 5705 and 6066, and obsoletes RFCs 5077, 5246, and 6961. This document also specifies new requirements for TLS 1.2 implementations.}
+      \field{howpublished}{RFC 8446}
+      \field{month}{8}
+      \field{pagetotal}{160}
+      \field{series}{Request for Comments}
+      \field{title}{{The Transport Layer Security (TLS) Protocol Version 1.3}}
+      \field{year}{2018}
+      \field{number}{8446}
+      \range{number}{1}
+      \verb{doi}
+      \verb 10.17487/RFC8446
+      \endverb
+      \verb{urlraw}
+      \verb https://www.rfc-editor.org/info/rfc8446
+      \endverb
+      \verb{url}
+      \verb https://www.rfc-editor.org/info/rfc8446
+      \endverb
+    \endentry
+    \entry{cmake}{misc}{}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{(Электронный ресурс)}
+      \field{title}{CMake --- Upgrade Your Software Build System --- \url{https://cmake.org/} (дата обращения: 20.12.2024)}
+    \endentry
+    \entry{ffmpeg}{misc}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{(Электронный ресурс)}
+      \field{title}{Ffmpeg --- \url{https://www.ffmpeg.org/} (дата обращения: 21.12.2024)}
+    \endentry
+    \entry{gtest}{misc}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{(Электронный ресурс)}
+      \field{title}{GoogleTest User's Guide --- \url{https://google.github.io/googletest/} (дата обращения: 21.12.2024)}
+    \endentry
+    \entry{wireshark}{misc}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{(Электронный ресурс)}
+      \field{title}{Wireshark · Go Deep --- \url{https://www.wireshark.org/} (дата обращения: 23.12.2024)}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+
