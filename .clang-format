@@ -6,8 +6,8 @@ AllowShortFunctionsOnASingleLine: Empty
 AlignConsecutiveMacros: false
 AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: false
-AlignConsecutiveShortCaseStatements:
-  Enabled: true
+#AlignConsecutiveShortCaseStatements:
+#  Enabled: true
 AlwaysBreakTemplateDeclarations: true
 BinPackArguments: false
 BinPackParameters: false
