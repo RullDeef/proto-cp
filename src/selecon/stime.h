@@ -2,8 +2,13 @@
 
 #include <stdint.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "stypes.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 static inline timestamp_t get_curr_timestamp(void) {
 	struct timespec ts;
@@ -26,3 +31,7 @@ static inline void reduce_fps(timestamp_t expected_delta, timestamp_t *prev_ts) 
 		*prev_ts = now;
 	}
 }
+
+#ifdef __cplusplus
+}
+#endif

@@ -9,6 +9,8 @@
 #include "dev_io.h"
 #include "dump.h"
 #include "selecon.h"
+#include "stats.h"
+#include "stime.h"
 #include "stub.h"
 
 #define STARTS_WITH(cmd, subst) (strncmp(cmd, subst, sizeof(subst) - 1) == 0)
@@ -26,6 +28,7 @@ static const char* help_message =
     "  -u|--user username     set user name\n"
     "  --version              print version and exit\n"
     "  --stub filename        stream given media file in a loop\n"
+    "  --stat filename        enable CSV network statistics collection\n"
     "\n"
     "DESCRIPTION:\n"
     "  Address can be IPv4/IPv6 (eg: 192.168.100.1:" SELECON_DEFAULT_LISTEN_PORT_STR
@@ -40,6 +43,7 @@ static struct Dev* dev_out             = NULL;
 static struct Stub* stub               = NULL;
 
 static struct PacketDumpMap* dump_mapper = NULL;
+static struct StatFile* statfile         = NULL;
 
 static void text_handler(void* user_data, part_id_t part_id, const char* message) {
 	printf("[%llu:] %s\n", part_id, message);
@@ -49,9 +53,19 @@ static void media_handler(void* user_data,
                           part_id_t part_id,
                           enum AVMediaType mtype,
                           struct AVFrame* frame) {
+	statfile_mark_arrived(statfile, context, part_id, mtype, frame);
 	if (dev_out != NULL)
 		dev_push_frame(dev_out, mtype, av_frame_clone(frame));
 	pdmap_dump(dump_mapper, part_id, mtype, frame);
+}
+
+static int process_hangup_cmd(char* cmd) {
+	enum SError err = selecon_hangup(context);
+	if (err == SELECON_OK)
+		printf("hangup successful\n");
+	else
+		printf("failed to hangup: %s\n", serror_str(err));
+	return 0;
 }
 
 static void process_help_cmd(char* cmd) {
@@ -62,10 +76,12 @@ static void process_help_cmd(char* cmd) {
 		    "  dev     manage IO devices\n"
 		    "  dump    print info about current selecon context state\n"
 		    "  exit    end active conference and close cli tool\n"
+		    "  hangup  emulate connection hangup\n"
 		    "  help    show this message\n"
 		    "  invite  send invitation for joining active conference to other client\n"
 		    "  leave   exit conference without exiting cli tool\n"
 		    "  quit    same as exit\n"
+		    "  reenter reenter same conference after hangup\n"
 		    "  say     send text message to conference chat\n"
 		    "  sleep   sleep\n"
 		    "  stub    set stub media file for playing in conference\n"
@@ -92,6 +108,12 @@ static void process_help_cmd(char* cmd) {
 			    "\n"
 			    "  Exit current conference and cli tool\n"
 			    "\n");
+		} else if (strcmp(subcmd, "hangup") == 0) {
+			printf(
+			    "  > hangup\n"
+			    "\n"
+			    "  Close all connections without sending LEAVE message to anybody\n"
+			    "\n");
 		} else if (strcmp(subcmd, "help") == 0) {
 			printf(
 			    "  > help [{command}]\n"
@@ -117,6 +139,12 @@ static void process_help_cmd(char* cmd) {
 			    "  > quit\n"
 			    "\n"
 			    "  Exit current conference and cli tool\n"
+			    "\n");
+		} else if (strcmp(subcmd, "reenter") == 0) {
+			printf(
+			    "  > reenter\n"
+			    "\n"
+			    "  Send everybody REENTER message after hangup to restore connections\n"
 			    "\n");
 		} else if (strcmp(subcmd, "say") == 0) {
 			printf(
@@ -226,6 +254,16 @@ static int process_leave_cmd(char* cmd) {
 	return 0;
 }
 
+static int process_reenter_cmd(char* cmd) {
+	printf("reentering conference with id = %llu...\n", selecon_get_conf_id(context));
+	enum SError err = selecon_reenter(context);
+	if (err == SELECON_OK)
+		printf("success!\n");
+	else
+		printf("failed: %s\n", serror_str(err));
+	return 0;
+}
+
 static int process_say_cmd(char* cmd) {
 	char* text = strchr(cmd, ' ');
 	if (text == NULL) {
@@ -271,20 +309,6 @@ static int process_stub_cmd(char* cmd) {
 }
 
 static int cmd_loop(void) {
-	context = selecon_context_alloc();
-	enum SError err =
-	    selecon_context_init2(context, participant_address, NULL, text_handler, media_handler);
-	if (err != SELECON_OK) {
-		printf("failed to initialize context: err = %s\n", serror_str(err));
-		return -1;
-	}
-	if (username != NULL) {
-		err = selecon_set_username(context, username);
-		if (err != SELECON_OK) {
-			printf("failed to set username: err = %s\n", serror_str(err));
-			return -1;
-		}
-	}
 	int ret = 0;
 	char cmd[1024];
 	while (true) {
@@ -296,6 +320,9 @@ static int cmd_loop(void) {
 			*newline = '\0';
 		if (STARTS_WITH(cmd, "exit") || STARTS_WITH(cmd, "quit")) {
 			break;
+		} else if (STARTS_WITH(cmd, "hangup")) {
+			if ((ret = process_hangup_cmd(cmd)))
+				break;
 		} else if (STARTS_WITH(cmd, "help") || STARTS_WITH(cmd, "?")) {
 			process_help_cmd(cmd);
 		} else if (STARTS_WITH(cmd, "dev")) {
@@ -309,6 +336,9 @@ static int cmd_loop(void) {
 				break;
 		} else if (STARTS_WITH(cmd, "leave")) {
 			if ((ret = process_leave_cmd(cmd)))
+				break;
+		} else if (STARTS_WITH(cmd, "reenter")) {
+			if ((ret = process_reenter_cmd(cmd)))
 				break;
 		} else if (STARTS_WITH(cmd, "say")) {
 			if ((ret = process_say_cmd(cmd)))
@@ -357,6 +387,8 @@ int main(int argc, char** argv) {
 			username = argv[++i];
 		} else if (strcmp(argv[i], "--stub") == 0) {
 			update_stub(argv[++i]);
+		} else if (strcmp(argv[i], "--stat") == 0) {
+			statfile_open(&statfile, argv[++i]);
 		} else {
 			printf("unknown option: %s\n", argv[i]);
 			return -1;
@@ -366,7 +398,22 @@ int main(int argc, char** argv) {
 	avdevice_register_all();
 	show_devices();
 	dump_mapper = pdmap_create("dumps/");  // init media dumper
-	int ret     = cmd_loop();
+	context     = selecon_context_alloc();
+	enum SError err =
+	    selecon_context_init2(context, participant_address, NULL, text_handler, media_handler);
+	if (err != SELECON_OK) {
+		printf("failed to initialize context: err = %s\n", serror_str(err));
+		return -1;
+	}
+	if (username != NULL) {
+		err = selecon_set_username(context, username);
+		if (err != SELECON_OK) {
+			printf("failed to set username: err = %s\n", serror_str(err));
+			return -1;
+		}
+	}
+	int ret = cmd_loop();
+	statfile_close(&statfile);
 	pdmap_free(&dump_mapper);
 	dev_close(&dev_in);
 	dev_close(&dev_out);

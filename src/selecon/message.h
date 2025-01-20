@@ -32,6 +32,9 @@ enum SMsgType {
 	// participant information updated, not including connection state
 	SMSG_PART_INFO,
 
+	// participant disconnected accidently and need to reconnect
+	SMSG_REENTER,
+
 	// textual data (aka conference chat)
 	SMSG_TEXT,
 
@@ -58,6 +61,7 @@ struct SMsgInvite {
 	conf_id_t conf_id;
 	part_id_t part_id;
 	timestamp_t conf_start_ts;
+	struct SEndpoint listen_ep;
 	char part_name[];
 };
 
@@ -80,6 +84,14 @@ struct SMsgPartPresence {
 			PART_LEAVE,
 		} state;
 	} states[];
+};
+
+struct SMsgReenter {
+	struct SMessage base;
+	conf_id_t conf_id;
+	part_id_t part_id;
+	// some kind of generated token to prove that this participant really was in conference
+	// (conf_id?)
 };
 
 struct SMsgText {
@@ -110,12 +122,15 @@ void message_free(struct SMessage** msg);
 struct SMessage* message_invite_alloc(conf_id_t conf_id,
                                       timestamp_t conf_start_ts,
                                       part_id_t part_id,
+                                      const struct SEndpoint* listen_ep,
                                       const char* part_name);
 struct SMessage* message_invite_accept_alloc(part_id_t id, const char* name, struct SEndpoint* ep);
 struct SMessage* message_invite_reject_alloc(void);
 
 // allocates part presence message with given states count
 struct SMsgPartPresence* message_part_presence_alloc(size_t count);
+
+struct SMsgReenter* message_reenter_alloc(conf_id_t conf_id, part_id_t part_id);
 
 // allocate text message
 struct SMessage* message_text_alloc(part_id_t source, const char* text);

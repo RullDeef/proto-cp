@@ -10,6 +10,9 @@ extern "C" {
 #include "config.h"
 #include "selecon.h"
 
+static_assert(sizeof(size_t) == 8);
+static_assert(sizeof(unsigned long long) == 8);
+
 static std::map<SContext*, std::deque<std::pair<part_id_t, std::string>>> userTextQueue;
 static std::map<SContext*, std::deque<std::pair<part_id_t, AVFrame*>>> userRcvQueue;
 

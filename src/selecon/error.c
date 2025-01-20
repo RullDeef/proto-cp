@@ -9,6 +9,7 @@ const char* serror_str(enum SError err) {
 		case SELECON_CON_ERROR: return "connection error";
 		case SELECON_CON_TIMEOUT: return "connection timeout";
 		case SELECON_CON_HANGUP: return "connection hang up";
+		case SELECON_NO_VALID_CONNECTIONS: return "no valid connections provided";
 		case SELECON_ALREADY_INIT: return "already init";
 		case SELECON_EMPTY_CONTEXT: return "empty context";
 		case SELECON_PTHREAD_ERROR: return "pthread error";

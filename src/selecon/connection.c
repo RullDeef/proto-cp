@@ -122,6 +122,7 @@ enum SError sconn_accept(struct SConnection *con, struct SConnection **out_con, 
 	return SELECON_OK;
 }
 
+#ifdef SELECON_USE_SECURE_CONNECTION
 enum SError sconn_accept_secure(struct SConnection *con,
                                 struct SConnection **out_con,
                                 int timeout_ms) {
@@ -139,6 +140,7 @@ enum SError sconn_accept_secure(struct SConnection *con,
 	sconn_disconnect(out_con);
 	return SELECON_SSL_ERROR;
 }
+#endif
 
 enum SError sconn_connect(struct SConnection **con, struct SEndpoint *ep) {
 	if (con == NULL || ep == NULL)
@@ -163,6 +165,7 @@ socket_err:
 	return SELECON_CON_ERROR;
 }
 
+#ifdef SELECON_USE_SECURE_CONNECTION
 enum SError sconn_connect_secure(struct SConnection **con, struct SEndpoint *ep) {
 	enum SError err = sconn_connect(con, ep);
 	if (err != SELECON_OK)
@@ -178,6 +181,7 @@ enum SError sconn_connect_secure(struct SConnection **con, struct SEndpoint *ep)
 	sconn_disconnect(con);
 	return SELECON_SSL_ERROR;
 }
+#endif
 
 enum SError sconn_disconnect(struct SConnection **con) {
 	if (con == NULL || *con == NULL)
@@ -200,9 +204,15 @@ enum SError sconn_send(struct SConnection *con, struct SMessage *msg) {
 	if (con == NULL || msg == NULL)
 		return SELECON_INVALID_ARG;
 	if (con->ssl != NULL) {
-		if (SSL_write(con->ssl, msg, msg->size) == -1) {
-			ERR_print_errors_fp(stderr);
-			return SELECON_CON_ERROR;
+		int ret = 0;
+	ssl_retry:
+		ret = SSL_write(con->ssl, msg, msg->size);
+		if (ret <= 0) {
+			switch (SSL_get_error(con->ssl, ret)) {
+				case SSL_ERROR_WANT_READ:
+				case SSL_ERROR_WANT_WRITE: goto ssl_retry;
+				default: ERR_print_errors_fp(stderr); return SELECON_CON_ERROR;
+			}
 		}
 	} else {
 		if (send(con->fd, msg, msg->size, 0) == -1) {
@@ -265,9 +275,13 @@ enum SError sconn_recv_one(struct SConnection **cons,
                            int timeout_ms) {
 	if (cons == NULL || count == 0 || msg == NULL || ready_index == NULL)
 		return SELECON_INVALID_ARG;
+	bool all_invalid = true;
+	for (size_t i = 0; i < count; ++i) all_invalid = all_invalid && cons[i] == NULL;
+	if (all_invalid)
+		return SELECON_NO_VALID_CONNECTIONS;
 	struct pollfd *pollfd = alloca(count * sizeof(struct pollfd));
 	for (size_t i = 0; i < count; ++i) {
-		pollfd[i].fd      = cons[i]->fd;
+		pollfd[i].fd      = cons[i] == NULL ? -1 : cons[i]->fd;
 		pollfd[i].events  = POLLIN;
 		pollfd[i].revents = 0;
 	}

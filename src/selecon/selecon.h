@@ -42,7 +42,10 @@ enum SError selecon_context_init2(struct SContext *context,
                                   text_handler_fn_t text_handler,
                                   media_handler_fn_t media_handler);
 
+conf_id_t selecon_get_conf_id(struct SContext *context);
 part_id_t selecon_get_self_id(struct SContext *context);
+
+timestamp_t selecon_get_start_ts(struct SContext *context);
 
 enum SError selecon_set_username(struct SContext *context, const char *username);
 
@@ -63,6 +66,12 @@ enum SError selecon_invite2(struct SContext *context, const char *address);
 
 // tell everybody in conference your intention to leave and disconnect from all of them
 enum SError selecon_leave_conference(struct SContext *context);
+
+// emulate hard hangup
+enum SError selecon_hangup(struct SContext *context);
+
+// re-enter conference after accidental hangup. Assumes valid context state
+enum SError selecon_reenter(struct SContext *context);
 
 // send textual message to conference participants
 enum SError selecon_send_text(struct SContext *context, const char *text);

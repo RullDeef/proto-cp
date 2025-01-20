@@ -9,7 +9,11 @@
 #define SELECON_DEFAULT_PART_NAME "user0"
 
 #define SELECON_DEFAULT_LISTEN_BUF 5
-#define SELECON_DEFAULT_SNDRCV_TIMEOUT 500
+#define SELECON_DEFAULT_SNDRCV_TIMEOUT 500     // ms
+#define SELECON_DEFAULT_SECURE_TIMEOUT 5000    // ms
+#define SELECON_DEFAULT_REENTER_TIMEOUT 30000  // ms
+
+// #define SELECON_USE_SECURE_CONNECTION
 
 // TODO: add check at context creation that selected codec supports our defaults
 #define SELECON_DEFAULT_AUDIO_CODEC_ID AV_CODEC_ID_AAC

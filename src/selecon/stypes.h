@@ -10,6 +10,7 @@ extern "C" {
 typedef unsigned long long conf_id_t;
 typedef unsigned long long part_id_t;
 
+// absolute timestamp in nanoseconds
 typedef unsigned long long timestamp_t;
 
 // participant endpoint abstraction (IP + port)

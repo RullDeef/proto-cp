@@ -94,9 +94,16 @@ static void stub_read_file(struct Stub* stub,
 				goto free_frames;
 			}
 			// update timestamp only for audio, if it is presented, otherwise - only for video
-			if (a_stream == NULL || packet->stream_index == audio_stream_index)
+			if (a_stream == NULL || packet->stream_index == audio_stream_index) {
+				printf("+ dur = %ld\n", frame->pkt_duration);
 				ts_delta += frame->pkt_duration;
+			}
 			frame->time_base = stream->time_base;
+			frame->pts =
+			    av_rescale_q(get_curr_timestamp() / 1000,
+			                 av_make_q(1, 1000000),
+			                 packet->stream_index == audio_stream_index ? a_stream->time_base
+			                                                            : v_stream->time_base);
 			if (packet->stream_index == video_stream_index)
 				frame->pict_type = AV_PICTURE_TYPE_NONE;  // reset picture type
 				                                          // frame timestamp correct here
@@ -113,6 +120,7 @@ static void stub_read_file(struct Stub* stub,
 		    av_rescale_q(ts_delta,
 		                 a_stream != NULL ? a_stream->time_base : v_stream->time_base,
 		                 av_make_q(1, 1000000));
+		printf("time delta: %ld\n", time_delta);
 		usleep(time_delta);
 	}
 free_frames:
