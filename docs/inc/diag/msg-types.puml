@@ -1,50 +1,48 @@
 @startjson
 {
-  "size": "int",
+  "size": "размер сообщения, <i>3 байт</i>",
   "spec": [
     {
-      "type": "INVITE",
-      "conf_id": "conf_id_t",
-	    "part_id": "part_id_t",
-	    "conf_start_ts": "timestamp_t",
-    	"part_name": "string"
+      "type": "INVITE (0x00), <i>1 байт</i>",
+      "conf_id": "ID конференции, <i>4 байт</i>",
+	    "part_id": "ID участника, <i>4 байт</i>",
+	    "conf_start_ts": "временная метка, <i>8 байт</i>",
+    	"part_name": "имя участника, <i>(size-20) байт</i>"
     },
     {
-      "type": "INVITE_ACCEPT",
-      "id": "part_id_t",
-	    "ep": "Endpoint",
-  	  "name": "string"
+      "type": "INVITE_ACCEPT (0x01), <i>1 байт</i>",
+      "id": "ID участника, <i>4 байт</i>",
+	    "ep": "Адрес подключения, <i>32 байт</i>",
+  	  "name": "имя участника, <i>(size-40) байт</i>"
     },
     {
-      "type": "INVITE_REJECT"
+      "type": "INVITE_REJECT (0x02), <i>1 байт</i>"
     },
     {
-      "type": "REENTER",
-      "conf_id": "conf_id_t",
-      "part_id": "part_id_t"
+      "type": "REENTER (0x03), <i>1 байт</i>",
+      "conf_id": "ID конференции, <i>4 байт</i>",
+	    "part_id": "ID участника, <i>4 байт</i>"
     },
     {
-      "type": "PART_PRESENCE",
-      "count": "size_t",
+      "type": "PART_PRESENCE (0х04), <i>1 байт</i>",
+      "count": "количество участников, <i>1 байт</i>",
       "states": {
-        "id": "part_id_t",
-        "role": "Role",
-        "ep": "Endpoint",
-        "state": [
-          "PART_JOIN",
-          "PART_LEAVE"
-        ]
+        "id": "ID участника, <i>4 байт</i>",
+        "role": "роль участника, <i>1 байт</i>",
+        "ep": "Адрес подключения, <i>32 байт</i>",
+        "state": "PART_JOIN (0x00) или",
+        "": "PART_LEAVE (0x01)"
       }
     },
     {
-      "type": "AUDIO",
-	    "source": "part_id_t",
-	    "data": "raw bytes"
+      "type": "AUDIO (0x05), <i>1 байт</i>",
+	    "source": "ID участника, <i>4 байт</i>",
+	    "data": "аудио пакет, <i>(size - 8) байт</i>"
     },
     {
-      "type": "VIDEO",
-	    "source": "part_id_t",
-	    "data": "raw bytes"
+      "type": "VIDEO (0x06), <i>1 байт</i>",
+	    "source": "ID участника, <i>4 байт</i>",
+	    "data": "видео пакет, <i>(size - 8) байт</i>"
     }
   ]
 }

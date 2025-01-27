@@ -7,15 +7,24 @@ title Организация конференции\nдля двух участ�
 participant "Участник <<А>>" as A
 participant "Участник <<Б>>" as B
 
-note left of A: ""conf_id"" = 123
-/ note right of B: ""conf_id"" = 456
+note left of A
+Конференция 1
+""conf_id"" = 123
+end note
+/ note right of B
+Конференция 2
+""conf_id"" = 456
+end note
 
 == Запуск конференции ==
 
 A -> B: <b>""INVITE""
 A <-- B: <b>""INVITE_ACCEPT""
-note left: ""conf_id"" = 123
-note right: ""conf_id"" = 123
+note right
+""conf_id""
+заменяется
+с 456 на 123
+end note
 
 == Обмен медиа данными ==
 
