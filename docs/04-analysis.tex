@@ -127,8 +127,29 @@ SIP и H.323, напротив, поддерживают управление с
 NAT используется для преобразования частных IP-адресов в публичные и наоборот, что позволяет нескольким устройствам в локальной сети использовать один публичный IP-адрес для выхода в интернет.
 Однако NAT создает сложности для прямого соединения между участниками, находящимися за разными NAT, так как они не могут напрямую обмениваться данными без дополнительных механизмов.
 
-Для преодоления ограничений NAT в бессерверных конференциях используются следующие подходы:
+Выделяют следующие типы реализаций NAT по способу обработки UDP пакетов \cite{nat-types}:
+\begin{itemize}[label=---]
+  \item \textit{Конус (Full Cone)}.
+  Все запросы с одного и того же внутреннего IP адреса и порта отображаются на один и тот же внешний IP адрес и порт.
+  Любой внешний хост может отправить пакет внутреннему хосту, отправляя его на отображенный врешний IP адрес.
+  %A full cone NAT is one where all requests from the same internal IP address and port are mapped to the same external IP address and port. Furthermore, any external host can send a packet to the internal host, and it sends a packet to the mapped external address.
 
+  \item \textit{Ограниченный конус (Restricted Cone)}.
+  То же, что и конус, за исключением того, что внешний хост (с IP адресом Х) может отправить пакет внутреннему хосту только если ранее внутренний хост отправлял пакет внешнему хосту по IP адресу Х.
+  %A restricted cone NAT is one where all requests from the same internal IP address and port are mapped to the same external IP address and port. Unlike a full cone NAT, an external host (with IP address X) can send a packet to the internal host only if the internal host had previously sent a packet to IP address X.   
+  
+  \item \textit{Конус, ограниченный портами (Port Restricted Cone)}.
+  То же, что и ограниченный конус, но включая ограничение на порты --- внешний хост (c IP адресом Х и портом Р) может отправить пакет внутреннему хосту только если ранее внутренний хост отравлял пакет внешнему хосту по IP адресу X и порту P.
+  %A port-restricted cone NAT is like a restricted cone NAT, but the restriction includes port numbers. Specifically, an external host can send a packet, with source IP address X and source port P, to the internal host only if the internal host had previously sent a packet to IP address X and port P.   
+  
+  \item \textit{Симметричный (Symmetric)}.
+  Все запросы с одного и того же внутреннего IP адреса и порта к одному и тому же IP адресу и порту хоста назначения отображаются на один и тот же внешний IP адрес и порт.
+  Если один хост отправляет пакет с тем же IP адресом и портом источника, но с другим адресом назначения, то используется другое отображение.
+  Более того, только внешний хост, получивший пакет, может отправить UDP пакет обратно источнику, находящемуся за NAT. 
+  %A symmetric NAT is one where all requests from the same internal IP address and port to a specific destination IP address and port, are mapped to the same external IP address and port.  If the same host sends a packet with the same source address and port, but to a different destination, a different mapping is used.  Furthermore, only the external host that receives a packet can send a UDP packet back to the internal host.
+\end{itemize}
+
+Для преодоления ограничений NAT в бессерверных конференциях используются следующие подходы:
 \begin{enumerate}
   \item STUN (Session Traversal Utilities for NAT).
   STUN --- это протокол, который позволяет участникам, находящимся за NAT, определить свой публичный IP-адрес и порт, назначенный NAT для исходящего соединения.
@@ -140,7 +161,7 @@ NAT используется для преобразования частных 
   
   STUN Позволяет установить прямое соединение между участниками, находящимися за NAT.
   Не требует дополнительных серверов для ретрансляции данных.
-  Однако, он не работает с симметричным NAT (NAT, который для каждого соединения, инициируемого парой <<внутренний адрес: внутренний порт>>, преобразуется в свободную уникальную случайно выбранную пару <<публичный адрес: публичный порт>>, запрещая установление соединения из публичной сети), где порты для входящих и исходящих соединений различаются.
+  Однако, он не работает с симметричным NAT.
   
   \item TURN (Traversal Using Relays around NAT).
   TURN --- это протокол, который позволяет участникам, находящимся за NAT, использовать ретрансляционный сервер для передачи данных, если прямое соединение невозможно.
