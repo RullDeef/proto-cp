@@ -15,36 +15,38 @@ extern "C" {
 enum SMsgType {
 	// conference invite. Includes information about conference in general as well as person, who
 	// sends this message. Must be accepted or rejected by receiver
-	SMSG_INVITE,
+	SMSG_INVITE = 0,
 
 	// invite accepted. Contains address of invited participant that is listening for incoming
 	// connections
-	SMSG_INVITE_ACCEPT,
+	SMSG_INVITE_ACCEPT = 1,
 
 	// invite rejected. No additional data
-	SMSG_INVITE_REJECT,
+	SMSG_INVITE_REJECT = 2,
 
 	// participants list updated. Keeps list of participant with their state change (joined or
 	// leaving). Send everybody this message with yourself marked as leaving to gracefully leave
 	// the conference
-	SMSG_PART_PRESENCE,
+	SMSG_PART_PRESENCE = 3,
 
 	// participant information updated, not including connection state
-	SMSG_PART_INFO,
+	SMSG_PART_INFO = 4,
 
 	// participant disconnected accidently and need to reconnect
-	SMSG_REENTER,
+	SMSG_REENTER = 5,
+
+	SMSG_LEAVE = 6,
 
 	// textual data (aka conference chat)
-	SMSG_TEXT,
+	SMSG_TEXT = 7,
 
 	// audio packet received. Contains recording timestamp and id of participants besides actual
 	// audio data
-	SMSG_AUDIO,
+	SMSG_AUDIO = 8,
 
 	// video packet received. Contains recording timestamp and id of participants with regions in
 	// merged frames
-	SMSG_VIDEO,
+	SMSG_VIDEO = 9,
 };
 
 // general message interface for passing between participants.
@@ -67,23 +69,29 @@ struct SMsgInvite {
 
 struct SMsgInviteAccept {
 	struct SMessage base;
-	part_id_t id;         // invited participant id
+	part_id_t part_id;    // invited participant id
 	struct SEndpoint ep;  // listening endpoint
-	char name[];          // invited participant name (NULL-terminated)
+	char part_name[];     // invited participant name (NULL-terminated)
 };
+
+// struct SMsgReject;
 
 struct SMsgPartPresence {
 	struct SMessage base;
-	size_t count;  // amount of states[]
-	struct PartPresenceState {
-		part_id_t id;
-		enum SRole role;
-		struct SEndpoint ep;
-		enum PresenceState {
-			PART_JOIN,
-			PART_LEAVE,
-		} state;
-	} states[];
+	part_id_t part_id;
+	enum SRole part_role;
+	struct SEndpoint ep;
+	enum PresenceState {
+		PART_JOIN,
+		PART_LEAVE,
+	} state;
+};
+
+struct SMsgPartInfo {
+	struct SMessage base;
+	part_id_t part_id;
+	enum SRole part_role;
+	char part_name[];
 };
 
 struct SMsgReenter {
@@ -94,22 +102,28 @@ struct SMsgReenter {
 	// (conf_id?)
 };
 
+// TODO: handle
+struct SMsgLeave {
+	struct SMessage base;
+	part_id_t part_id;
+};
+
 struct SMsgText {
 	struct SMessage base;
-	part_id_t source_part_id;
+	part_id_t part_id;
 	char data[];  // NULL-terminated string
 };
 
 struct SMsgAudio {
 	struct SMessage base;
-	part_id_t source_part_id;  // some participants can play 'retransmitor' role and transfer
-	                           // others' packets
-	uint8_t data[];  // size of payload must be calculated dynamically from base.size field
+	part_id_t part_id;  // some participants can play 'retransmitor' role and transfer
+	                    // others' packets
+	uint8_t data[];     // size of payload must be calculated dynamically from base.size field
 };
 
 struct SMsgVideo {
 	struct SMessage base;
-	part_id_t source_part_id;
+	part_id_t part_id;
 	uint8_t data[];
 };
 
@@ -127,8 +141,7 @@ struct SMessage* message_invite_alloc(conf_id_t conf_id,
 struct SMessage* message_invite_accept_alloc(part_id_t id, const char* name, struct SEndpoint* ep);
 struct SMessage* message_invite_reject_alloc(void);
 
-// allocates part presence message with given states count
-struct SMsgPartPresence* message_part_presence_alloc(size_t count);
+struct SMsgPartPresence* message_part_presence_alloc(void);
 
 struct SMsgReenter* message_reenter_alloc(conf_id_t conf_id, part_id_t part_id);
 

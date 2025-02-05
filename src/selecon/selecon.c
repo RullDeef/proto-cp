@@ -129,43 +129,39 @@ static enum SError do_handshake_client(struct SConnection *con,
 static void handle_part_presence_message(struct SContext *ctx,
                                          size_t part_index,
                                          struct SMsgPartPresence *msg) {
-	for (size_t i = 0; i < msg->count; ++i) {
-		if (msg->states[i].state == PART_JOIN) {
-			// meet with newbe using invite
-			bool part_is_new = true;
-			pthread_rwlock_rdlock(&ctx->part_rwlock);
-			for (size_t j = 0; j < ctx->nb_participants - 1; ++j) {
-				if (ctx->participants[j].id == msg->states[i].id) {
-					part_is_new = false;
-					break;
-				}
+	if (msg->state == PART_LEAVE)
+		remove_participant(ctx, part_index);
+	else if (msg->state == PART_JOIN) {
+		bool part_is_new = true;  // meet with newbe using invite
+		pthread_rwlock_rdlock(&ctx->part_rwlock);
+		for (size_t j = 0; j < ctx->nb_participants - 1; ++j) {
+			if (ctx->participants[j].id == msg->part_id) {
+				part_is_new = false;
+				break;
 			}
-			pthread_rwlock_unlock(&ctx->part_rwlock);
-			if (part_is_new) {
-				enum SError err = selecon_invite(ctx, &msg->states[i].ep);
-				if (err != SELECON_OK)
-					fprintf(stderr,
-					        "failed to meet participant %llu: %s\n",
-					        msg->states[i].id,
-					        serror_str(err));
-			}
-		} else if (msg->states[i].state == PART_LEAVE)
-			remove_participant(ctx, part_index);
+		}
+		pthread_rwlock_unlock(&ctx->part_rwlock);
+		if (part_is_new) {
+			enum SError err = selecon_invite(ctx, &msg->ep);
+			if (err != SELECON_OK)
+				fprintf(
+				    stderr, "failed to meet participant %llu: %s\n", msg->part_id, serror_str(err));
+		}
 	}
 }
 
 static void handle_text_message(struct SContext *ctx, struct SMsgText *msg) {
 	if (ctx->text_handler != NULL)
-		ctx->text_handler(ctx, msg->source_part_id, msg->data);
+		ctx->text_handler(ctx, msg->part_id, msg->data);
 }
 
 static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio *msg) {
 	sstream_id_t stream =
-	    scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
+	    scont_find_stream(&ctx->streams, msg->part_id, SSTREAM_AUDIO, SSTREAM_INPUT);
 	if (stream == NULL)
 		fprintf(stderr,
 		        "stream not found for arrived audio packet from part_id = %llu\n",
-		        msg->source_part_id);
+		        msg->part_id);
 	else {
 		struct AVPacket *packet = av_packet_deserialize(msg->data);
 		if (packet == NULL)
@@ -183,11 +179,11 @@ static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio *
 
 static void handle_video_packet_message(struct SContext *ctx, struct SMsgVideo *msg) {
 	sstream_id_t stream =
-	    scont_find_stream(&ctx->streams, msg->source_part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
+	    scont_find_stream(&ctx->streams, msg->part_id, SSTREAM_VIDEO, SSTREAM_INPUT);
 	if (stream == NULL)
 		fprintf(stderr,
 		        "stream not found for arrived video packet from part_id = %llu\n",
-		        msg->source_part_id);
+		        msg->part_id);
 	else {
 		struct AVPacket *packet = av_packet_deserialize(msg->data);
 		if (packet == NULL)
@@ -546,15 +542,15 @@ static enum SError invite_connected(struct SContext *context,
 	if (err != SELECON_OK || acceptMsg == NULL)
 		return err;
 	// send other participants info about invitee
-	struct SMsgPartPresence *msg = message_part_presence_alloc(1);
-	msg->states[0].id            = acceptMsg->id;
-	msg->states[0].ep            = acceptMsg->ep;
-	msg->states[0].role          = SROLE_CLIENT;
-	msg->states[0].state         = PART_JOIN;
+	struct SMsgPartPresence *msg = message_part_presence_alloc();
+	msg->part_id                 = acceptMsg->part_id;
+	msg->ep                      = acceptMsg->ep;
+	msg->part_role               = SROLE_CLIENT;
+	msg->state                   = PART_JOIN;
 	pthread_rwlock_wrlock(&context->part_rwlock);
 	for (size_t i = 0; i < context->nb_participants - 1; ++i)
 		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
-	add_participant(context, acceptMsg->id, acceptMsg->name, ep, con);
+	add_participant(context, acceptMsg->part_id, acceptMsg->part_name, ep, con);
 	if (context->nb_participants == 2 && !context->conf_thread_working) {
 		if (pthread_create(&context->conf_thread, NULL, conf_worker, context) != 0)
 			exit(-1);  // TODO: leave conference? kick invited participant? what to do here
@@ -562,7 +558,7 @@ static enum SError invite_connected(struct SContext *context,
 		pthread_setname_np(context->conf_thread, "conf");
 	}
 	pthread_rwlock_unlock(&context->part_rwlock);
-	*out_part_id = acceptMsg->id;
+	*out_part_id = acceptMsg->part_id;
 	message_free((struct SMessage **)&msg);
 	message_free((struct SMessage **)&acceptMsg);
 	return SELECON_OK;
@@ -619,10 +615,10 @@ enum SError selecon_leave_conference(struct SContext *context) {
 		return SELECON_EMPTY_CONTEXT;
 	if (context->nb_participants == 1)
 		return SELECON_OK;
-	struct SMsgPartPresence *msg = message_part_presence_alloc(1);
-	msg->states[0].id            = context->self.id;
-	msg->states[0].ep            = (struct SEndpoint){};
-	msg->states[0].state         = PART_LEAVE;
+	struct SMsgPartPresence *msg = message_part_presence_alloc();
+	msg->part_id                 = context->self.id;
+	msg->ep                      = (struct SEndpoint){};
+	msg->state                   = PART_LEAVE;
 	pthread_rwlock_wrlock(&context->part_rwlock);
 	for (size_t i = 0; i < context->nb_participants - 1; ++i)
 		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
