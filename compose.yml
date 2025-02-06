@@ -1,22 +1,66 @@
 services:
-  user1: &userTemplate
+  router:
+    image: alpine:3.20.1
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+    networks:
+      net1:
+        ipv4_address: 192.168.10.254
+      net2:
+        ipv4_address: 192.168.20.254
+      net3:
+        ipv4_address: 192.168.30.254
+    command: >
+      /bin/sh -c "apk update &&
+                  apk add tcpdump &&
+                  tcpdump -i eth0 -i eth1 -i eth2 -v"
+  user1:
     build: .
-    volumes:
-      - ./build:/app:ro
+    cap_add:
+      - NET_ADMIN
+    environment:
+      GW_IP: 192.168.10.254
+      USERNAME: user1
     networks:
       net1:
-        ipv4_address: 192.168.200.1
-    entrypoint: [ '/app/example' ]
+        ipv4_address: 192.168.10.2
+    command: /bin/bash
   user2:
-    <<: *userTemplate
+    build: .
+    cap_add:
+      - NET_ADMIN
+    environment:
+      GW_IP: 192.168.20.254
+      USERNAME: user2
     networks:
-      net1:
-        ipv4_address: 192.168.200.2
+      net2:
+        ipv4_address: 192.168.20.2
+    command: /bin/bash
+  user3:
+    build: .
+    cap_add:
+      - NET_ADMIN
+    environment:
+      GW_IP: 192.168.30.254
+      USERNAME: user3
+    networks:
+      net3:
+        ipv4_address: 192.168.30.2
 networks:
   net1:
     driver: bridge
     ipam:
       config:
-        - subnet: 192.168.200.0/24
-          gateway: 192.168.200.254
-
+        - subnet: 192.168.10.0/24
+  net2:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.20.0/24
+  net3:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.30.0/24

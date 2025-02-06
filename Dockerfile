@@ -1,5 +1,6 @@
 # Dockerfile for example client
-FROM alpine:3.20.1
-RUN apk add libc6-compat
-COPY build/example /app/selecon
-CMD [ "/app/selecon" ]
+FROM debian:12.9
+RUN apt update && apt upgrade -y && \
+    apt install -y libavdevice-dev iproute2 iputils-ping
+COPY docker-user-route.sh /app/route.sh
+COPY build/selecon_cli /app/selecon
