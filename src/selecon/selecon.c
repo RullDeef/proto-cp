@@ -66,6 +66,7 @@ void selecon_context_free(struct SContext **context) {
 static void add_participant(struct SContext *ctx,
                             part_id_t id,
                             const char *name,
+                            enum SRole role,
                             const struct SEndpoint *listen_ep,
                             struct SConnection *con) {
 	ctx->participants =
@@ -75,6 +76,7 @@ static void add_participant(struct SContext *ctx,
 	ctx->participants[index].listen_ep  = *listen_ep;
 	ctx->participants[index].connection = con;
 	ctx->participants[index].name       = strdup(name);
+	ctx->participants[index].role       = role;
 	ctx->nb_participants++;
 }
 
@@ -102,11 +104,23 @@ static void remove_participant(struct SContext *ctx, size_t index) {
 // | 3    | recvs confirm msg | sends confirm msg |
 static enum SError do_handshake_srv(struct SContext *ctx,
                                     struct SConnection *con,
-                                    struct SMsgInvite *invite) {
-	struct SMessage *msg =
-	    ctx->invite_handler(invite)
-	        ? message_invite_accept_alloc(ctx->self.id, ctx->self.name, &ctx->listen_ep)
-	        : message_invite_reject_alloc();
+                                    struct SMsgInvite *invite,
+                                    bool *accepted) {
+	struct SMessage *msg = NULL;
+	if (ctx->conf_id == invite->conf_id) {
+		msg       = message_invite_accept_alloc(ctx->self.id, ctx->self.name, &ctx->listen_ep);
+		*accepted = true;
+	} else if (!verify_conf_id(invite->conf_id, invite->part_id, invite->conf_start_ts)) {
+		fprintf(stderr, "invalid invite recieved for conf %llu\n", invite->conf_id);
+		msg       = message_invite_reject_alloc();
+		*accepted = false;
+	} else if (ctx->invite_handler(invite)) {
+		msg       = message_invite_accept_alloc(ctx->self.id, ctx->self.name, &ctx->listen_ep);
+		*accepted = true;
+	} else {
+		msg       = message_invite_reject_alloc();
+		*accepted = false;
+	}
 	enum SError err = sconn_send(con, msg);
 	message_free(&msg);
 	return err;
@@ -173,7 +187,9 @@ static void handle_audio_packet_message(struct SContext *ctx, struct SMsgAudio *
 			fprintf(stderr, "failed to deserialize packet\n");
 		else {
 			enum SError err = scont_push_packet(&ctx->streams, stream, &packet);
-			if (err != SELECON_OK) {
+			if (err == SELECON_OK)
+				fprintf(stderr, "recvd audio packet from %llu\n", msg->part_id);
+			else {
 				fprintf(
 				    stderr, "failed to push audio packet to stream: err = %s\n", serror_str(err));
 				av_packet_free(&packet);
@@ -193,8 +209,10 @@ static void handle_video_packet_message(struct SContext *ctx, struct SMsgVideo *
 		struct AVPacket *packet = av_packet_deserialize(msg->data);
 		if (packet == NULL)
 			fprintf(stderr, "failed to deserialize packet\n");
-		else
+		else {
+			fprintf(stderr, "recvd video packet from %llu\n", msg->part_id);
 			scont_push_packet(&ctx->streams, stream, &packet);
+		}
 	}
 }
 
@@ -203,8 +221,13 @@ static void handle_part_leave(struct SContext *ctx, size_t part_index, struct SM
 	// check if gived participant id matches one in message
 	if (ctx->participants[part_index].id != msg->part_id)
 		fprintf(stderr, "prevented bad leave message from different participant\n");
-	else
+	else {
 		remove_participant_locked(ctx, part_index);
+		fprintf(stderr,
+		        "participant %llu (%s) leaved!\n",
+		        ctx->participants[part_index].id,
+		        ctx->participants[part_index].name);
+	}
 	pthread_rwlock_unlock(&ctx->part_rwlock);
 }
 
@@ -315,15 +338,17 @@ static void *conf_worker(void *arg) {
 static enum SError handle_invite(struct SContext *ctx,
                                  struct SConnection *con,
                                  struct SMsgInvite *invite) {
-	enum SError err = do_handshake_srv(ctx, con, invite);
+	bool accepted   = false;
+	enum SError err = do_handshake_srv(ctx, con, invite, &accepted);
 	if (err != SELECON_OK)
 		return err;
-	if (!verify_conf_id(invite->conf_id, invite->part_id, invite->conf_start_ts))
-		return SELECON_INVITE_INVALID;
+	if (!accepted)
+		return SELECON_INVITE_REJECTED;
 	if (ctx->conf_id != invite->conf_id) {
 		selecon_leave_conference(ctx);  // leave old conference
 		ctx->conf_id       = invite->conf_id;
 		ctx->conf_start_ts = invite->conf_start_ts;
+		ctx->self.role     = SROLE_LISTENER;
 	}
 	sstream_id_t audio_stream = NULL;
 	sstream_id_t video_stream = NULL;
@@ -347,7 +372,8 @@ static enum SError handle_invite(struct SContext *ctx,
 		return err;
 	}
 	pthread_rwlock_wrlock(&ctx->part_rwlock);
-	add_participant(ctx, invite->part_id, invite->part_name, &invite->listen_ep, con);
+	add_participant(
+	    ctx, invite->part_id, invite->part_name, invite->part_role, &invite->listen_ep, con);
 	if (ctx->nb_participants == 2 && !ctx->conf_thread_working) {
 		// TODO: memory check
 		pthread_create(&ctx->conf_thread, NULL, conf_worker, ctx);
@@ -415,9 +441,15 @@ static void *invite_worker(void *arg) {
 				sconn_disconnect(&con);
 			} else {
 				// check message type
-				if (msg->type == SMSG_INVITE)
+				if (msg->type == SMSG_INVITE) {
+					struct SMsgInvite *invite = (struct SMsgInvite *)msg;
+					fprintf(stderr,
+					        "INVITE recvd: conf_id=%llu part_id=%llu role=%d\n",
+					        invite->conf_id,
+					        invite->part_id,
+					        invite->part_role);
 					err = handle_invite(ctx, con, (struct SMsgInvite *)msg);
-				else if (msg->type == SMSG_REENTER) {
+				} else if (msg->type == SMSG_REENTER) {
 					err = handle_reenter(ctx, con, (struct SMsgReenter *)msg);
 					if (err == SELECON_OK) {
 						// send message about successul authentication
@@ -467,7 +499,7 @@ enum SError selecon_context_init(struct SContext *ctx,
 		return SELECON_PTHREAD_ERROR;
 	ctx->nb_participants     = 1;
 	ctx->participants        = NULL;
-	ctx->self                = spart_init(SELECON_DEFAULT_PART_NAME);
+	ctx->self                = spart_init(SELECON_DEFAULT_PART_NAME, SROLE_ORGANISATOR);
 	ctx->listen_ep           = *ep;
 	ctx->invite_handler      = invite_handler == NULL ? selecon_accept_any : invite_handler;
 	ctx->text_handler        = text_handler;
@@ -540,7 +572,7 @@ void selecon_context_dump(FILE *fd, struct SContext *context) {
 	spart_dump(fd, &context->self);
 	fprintf(fd, " (self)\n");
 	for (int i = 0; i < context->nb_participants - 1; ++i) {
-		fprintf(fd, "  - ");  // TODO: print participant role and hangup state
+		fprintf(fd, "  - ");
 		spart_dump(fd, &context->participants[i]);
 		fprintf(fd, "\n");
 	}
@@ -563,6 +595,7 @@ static enum SError invite_connected(struct SContext *context,
 	struct SMessage *inviteMsg         = message_invite_alloc(context->conf_id,
                                                       context->conf_start_ts,
                                                       context->self.id,
+                                                      context->self.role,
                                                       &context->listen_ep,
                                                       context->self.name);
 	struct SMsgInviteAccept *acceptMsg = NULL;
@@ -573,12 +606,12 @@ static enum SError invite_connected(struct SContext *context,
 	struct SMsgPartPresence *msg = message_part_presence_alloc();
 	msg->part_id                 = acceptMsg->part_id;
 	msg->ep                      = acceptMsg->ep;
-	msg->part_role               = SROLE_CLIENT;
+	msg->part_role               = SROLE_LISTENER;
 	msg->state                   = PART_JOIN;
 	pthread_rwlock_wrlock(&context->part_rwlock);
 	for (size_t i = 0; i < context->nb_participants - 1; ++i)
 		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
-	add_participant(context, acceptMsg->part_id, acceptMsg->part_name, ep, con);
+	add_participant(context, acceptMsg->part_id, acceptMsg->part_name, SROLE_LISTENER, ep, con);
 	if (context->nb_participants == 2 && !context->conf_thread_working) {
 		if (pthread_create(&context->conf_thread, NULL, conf_worker, context) != 0)
 			exit(-1);  // TODO: leave conference? kick invited participant? what to do here
@@ -659,6 +692,7 @@ enum SError selecon_leave_conference(struct SContext *context) {
 	message_free((struct SMessage **)&msg);
 	context->conf_start_ts = get_curr_timestamp();
 	context->conf_id       = generate_conf_id(context->self.id, context->conf_start_ts);
+	context->self.role     = SROLE_ORGANISATOR;
 	return SELECON_OK;
 }
 

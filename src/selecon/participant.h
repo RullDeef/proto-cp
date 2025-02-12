@@ -32,7 +32,7 @@ struct SParticipant {
 	timestamp_t hangup_timestamp;
 };
 
-struct SParticipant spart_init(const char* name);
+struct SParticipant spart_init(const char* name, enum SRole role);
 
 // frees allocated resources
 void spart_destroy(struct SParticipant* par);

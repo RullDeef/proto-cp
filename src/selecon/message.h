@@ -66,6 +66,7 @@ struct SMsgInvite {
 	struct SMessage base;
 	conf_id_t conf_id;
 	part_id_t part_id;
+	enum SRole part_role;
 	timestamp_t conf_start_ts;
 	struct SEndpoint listen_ep;
 	char part_name[];
@@ -108,7 +109,6 @@ struct SMsgReenterConfirm {
 	struct SMessage base;
 };
 
-// TODO: handle
 struct SMsgLeave {
 	struct SMessage base;
 	part_id_t part_id;
@@ -142,6 +142,7 @@ void message_free(struct SMessage** msg);
 struct SMessage* message_invite_alloc(conf_id_t conf_id,
                                       timestamp_t conf_start_ts,
                                       part_id_t part_id,
+                                      enum SRole role,
                                       const struct SEndpoint* listen_ep,
                                       const char* part_name);
 struct SMessage* message_invite_accept_alloc(part_id_t id, const char* name, struct SEndpoint* ep);

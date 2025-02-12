@@ -164,7 +164,7 @@ static void pdump_dump(struct PacketDump* pdump, enum AVMediaType mtype, struct 
 	switch (mtype) {
 		case AVMEDIA_TYPE_AUDIO: return pdump_dump_audio(pdump, frame);
 		case AVMEDIA_TYPE_VIDEO: return pdump_dump_video(pdump, frame);
-		default:                 return assert(0);
+		default: return assert(0);
 	}
 }
 

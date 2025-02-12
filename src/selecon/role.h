@@ -5,9 +5,8 @@ extern "C" {
 #endif
 
 enum SRole {
-	SROLE_CLIENT,
-	SROLE_TRANSMITTER,
-	SROLE_TRANSCODER,
+	SROLE_ORGANISATOR = 0,
+	SROLE_LISTENER    = 1,
 };
 
 const char* srole_str(enum SRole role);

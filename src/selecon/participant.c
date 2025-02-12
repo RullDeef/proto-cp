@@ -13,11 +13,11 @@ static unsigned long long generate_id() {
 	return rand() % ULONG_MAX;
 }
 
-struct SParticipant spart_init(const char* name) {
+struct SParticipant spart_init(const char* name, enum SRole role) {
 	struct SParticipant par;
 	par.id               = generate_id();
 	par.name             = strdup(name);
-	par.role             = SROLE_CLIENT;
+	par.role             = role;
 	par.connection       = NULL;
 	par.hangup_timestamp = 0;
 	return par;

@@ -95,7 +95,7 @@ static void stub_read_file(struct Stub* stub,
 			}
 			// update timestamp only for audio, if it is presented, otherwise - only for video
 			if (a_stream == NULL || packet->stream_index == audio_stream_index) {
-				printf("+ dur = %ld\n", frame->pkt_duration);
+				// printf("+ dur = %ld\n", frame->pkt_duration);
 				ts_delta += frame->pkt_duration;
 			}
 			frame->time_base = stream->time_base;
@@ -120,7 +120,7 @@ static void stub_read_file(struct Stub* stub,
 		    av_rescale_q(ts_delta,
 		                 a_stream != NULL ? a_stream->time_base : v_stream->time_base,
 		                 av_make_q(1, 1000000));
-		printf("time delta: %ld\n", time_delta);
+		// printf("time delta: %ld\n", time_delta);
 		usleep(time_delta);
 	}
 free_frames:

@@ -27,6 +27,7 @@ void message_free(struct SMessage** msg) {
 struct SMessage* message_invite_alloc(conf_id_t conf_id,
                                       timestamp_t conf_start_ts,
                                       part_id_t part_id,
+                                      enum SRole role,
                                       const struct SEndpoint* listen_ep,
                                       const char* part_name) {
 	size_t size            = sizeof(struct SMsgInvite) + strlen(part_name) + 1;
@@ -34,6 +35,7 @@ struct SMessage* message_invite_alloc(conf_id_t conf_id,
 	msg->conf_id           = conf_id;
 	msg->conf_start_ts     = conf_start_ts;
 	msg->part_id           = part_id;
+	msg->part_role         = role;
 	msg->listen_ep         = *listen_ep;
 	strcpy(msg->part_name, part_name);
 	return (struct SMessage*)msg;
