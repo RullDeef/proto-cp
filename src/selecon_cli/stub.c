@@ -85,7 +85,7 @@ static void stub_read_file(struct Stub* stub,
 			goto free_frames;
 		}
 		int64_t ts_delta = 0;
-		while (true) {
+		while (!stub->close_requested) {
 			int ret = avcodec_receive_frame(codecCtx, frame);
 			if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
 				break;

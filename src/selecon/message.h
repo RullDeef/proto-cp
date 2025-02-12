@@ -32,7 +32,9 @@ enum SMsgType {
 	// participant information updated, not including connection state
 	SMSG_PART_INFO = 4,
 
-	// participant disconnected accidently and need to reconnect
+	// participant disconnected accidently and need to reconnect. Upon successfull reconnection
+	// other side must send same message type (but with no fields) back. If verification failed -
+	// other side immediately disconnects us
 	SMSG_REENTER = 5,
 
 	SMSG_LEAVE = 6,

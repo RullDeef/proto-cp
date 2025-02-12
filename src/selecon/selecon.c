@@ -286,6 +286,7 @@ static void *conf_worker(void *arg) {
 		if (err == SELECON_CON_HANGUP) {
 			handle_part_disconnected(ctx, index);  // participant accidently disconnected!
 			++hangup_count;
+			err = SELECON_OK;  // do not exit loop
 		} else if (err == SELECON_OK)
 			handle_message(ctx, index, msg);
 		if (hangup_count > 0)
@@ -338,6 +339,7 @@ static enum SError handle_invite(struct SContext *ctx,
 		pthread_setname_np(ctx->conf_thread, "conf");
 	}
 	pthread_rwlock_unlock(&ctx->part_rwlock);
+	fprintf(stderr, "joined new conference: %llu\n", invite->conf_id);
 	return SELECON_OK;
 }
 
@@ -378,6 +380,7 @@ static enum SError handle_reenter(struct SContext *ctx,
 		                         SSTREAM_INPUT,
 		                         &video_stream);
 		assert(err == SELECON_OK);
+		fprintf(stderr, "participant %zu reconnected!\n", index);
 	}
 	pthread_rwlock_unlock(&ctx->part_rwlock);
 	return err;
@@ -399,9 +402,17 @@ static void *invite_worker(void *arg) {
 				// check message type
 				if (msg->type == SMSG_INVITE)
 					err = handle_invite(ctx, con, (struct SMsgInvite *)msg);
-				else if (msg->type == SMSG_REENTER)
+				else if (msg->type == SMSG_REENTER) {
 					err = handle_reenter(ctx, con, (struct SMsgReenter *)msg);
-				else {
+					if (err == SELECON_OK) {
+						// send message about successul authentication
+						struct SMessage *msg =
+						    message_alloc2(sizeof(struct SMessage), SMSG_REENTER);
+						err = sconn_send(con, msg);
+						assert(err == SELECON_OK);
+						message_free(&msg);
+					}
+				} else {
 					fprintf(stderr, "recvd unexpected message type: %d\n", msg->type);
 					err = SELECON_CON_ERROR;
 				}
