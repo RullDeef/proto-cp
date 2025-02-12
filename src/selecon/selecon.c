@@ -78,14 +78,18 @@ static void add_participant(struct SContext *ctx,
 	ctx->nb_participants++;
 }
 
-static void remove_participant(struct SContext *ctx, size_t index) {
+static void remove_participant_locked(struct SContext *ctx, size_t index) {
 	// remove all asociated streams
 	scont_close_streams(&ctx->streams, ctx->participants[index].id);
-	pthread_rwlock_wrlock(&ctx->part_rwlock);
 	spart_destroy(&ctx->participants[index]);
 	for (size_t i = index + 1; i < ctx->nb_participants - 1; ++i)
 		ctx->participants[i - 1] = ctx->participants[i];
 	ctx->nb_participants--;
+}
+
+static void remove_participant(struct SContext *ctx, size_t index) {
+	pthread_rwlock_wrlock(&ctx->part_rwlock);
+	remove_participant_locked(ctx, index);
 	pthread_rwlock_unlock(&ctx->part_rwlock);
 }
 
@@ -194,11 +198,22 @@ static void handle_video_packet_message(struct SContext *ctx, struct SMsgVideo *
 	}
 }
 
+static void handle_part_leave(struct SContext *ctx, size_t part_index, struct SMsgLeave *msg) {
+	pthread_rwlock_wrlock(&ctx->part_rwlock);
+	// check if gived participant id matches one in message
+	if (ctx->participants[part_index].id != msg->part_id)
+		fprintf(stderr, "prevented bad leave message from different participant\n");
+	else
+		remove_participant_locked(ctx, part_index);
+	pthread_rwlock_unlock(&ctx->part_rwlock);
+}
+
 // general message handler routine
 static void handle_message(struct SContext *ctx, size_t part_index, struct SMessage *msg) {
 	switch (msg->type) {
 		case SMSG_PART_PRESENCE:
 			return handle_part_presence_message(ctx, part_index, (struct SMsgPartPresence *)msg);
+		case SMSG_LEAVE: return handle_part_leave(ctx, part_index, (struct SMsgLeave *)msg);
 		case SMSG_TEXT: return handle_text_message(ctx, (struct SMsgText *)msg);
 		case SMSG_AUDIO: return handle_audio_packet_message(ctx, (struct SMsgAudio *)msg);
 		case SMSG_VIDEO: return handle_video_packet_message(ctx, (struct SMsgVideo *)msg);
@@ -406,9 +421,8 @@ static void *invite_worker(void *arg) {
 					err = handle_reenter(ctx, con, (struct SMsgReenter *)msg);
 					if (err == SELECON_OK) {
 						// send message about successul authentication
-						struct SMessage *msg =
-						    message_alloc2(sizeof(struct SMessage), SMSG_REENTER);
-						err = sconn_send(con, msg);
+						struct SMessage *msg = message_reenter_confirm_alloc();
+						err                  = sconn_send(con, msg);
 						assert(err == SELECON_OK);
 						message_free(&msg);
 					}
@@ -526,7 +540,7 @@ void selecon_context_dump(FILE *fd, struct SContext *context) {
 	spart_dump(fd, &context->self);
 	fprintf(fd, " (self)\n");
 	for (int i = 0; i < context->nb_participants - 1; ++i) {
-		fprintf(fd, "  - ");
+		fprintf(fd, "  - ");  // TODO: print participant role and hangup state
 		spart_dump(fd, &context->participants[i]);
 		fprintf(fd, "\n");
 	}
@@ -691,7 +705,7 @@ enum SError selecon_reenter(struct SContext *context) {
 			break;
 		}
 		err = sconn_recv(con, (struct SMessage **)&msg);
-		if (err != SELECON_OK) {
+		if (err != SELECON_OK || msg->base.type != SMSG_REENTER_CONFIRM) {
 			fprintf(stderr,
 			        "failed to recv reenter response from participant %zu: err = %s\n",
 			        i,

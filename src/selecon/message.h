@@ -33,22 +33,24 @@ enum SMsgType {
 	SMSG_PART_INFO = 4,
 
 	// participant disconnected accidently and need to reconnect. Upon successfull reconnection
-	// other side must send same message type (but with no fields) back. If verification failed -
-	// other side immediately disconnects us
+	// other side must send SMSG_REENTER_CONFIRM message back. If verification failed - other side
+	// immediately disconnects us
 	SMSG_REENTER = 5,
 
-	SMSG_LEAVE = 6,
+	SMSG_REENTER_CONFIRM = 6,
+
+	SMSG_LEAVE = 7,
 
 	// textual data (aka conference chat)
-	SMSG_TEXT = 7,
+	SMSG_TEXT = 8,
 
 	// audio packet received. Contains recording timestamp and id of participants besides actual
 	// audio data
-	SMSG_AUDIO = 8,
+	SMSG_AUDIO = 9,
 
 	// video packet received. Contains recording timestamp and id of participants with regions in
 	// merged frames
-	SMSG_VIDEO = 9,
+	SMSG_VIDEO = 10,
 };
 
 // general message interface for passing between participants.
@@ -100,8 +102,10 @@ struct SMsgReenter {
 	struct SMessage base;
 	conf_id_t conf_id;
 	part_id_t part_id;
-	// some kind of generated token to prove that this participant really was in conference
-	// (conf_id?)
+};
+
+struct SMsgReenterConfirm {
+	struct SMessage base;
 };
 
 // TODO: handle
@@ -146,6 +150,8 @@ struct SMessage* message_invite_reject_alloc(void);
 struct SMsgPartPresence* message_part_presence_alloc(void);
 
 struct SMsgReenter* message_reenter_alloc(conf_id_t conf_id, part_id_t part_id);
+
+struct SMessage* message_reenter_confirm_alloc(void);
 
 // allocate text message
 struct SMessage* message_text_alloc(part_id_t source, const char* text);

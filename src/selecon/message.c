@@ -67,6 +67,10 @@ struct SMsgReenter* message_reenter_alloc(conf_id_t conf_id, part_id_t part_id) 
 	return msg;
 }
 
+struct SMessage* message_reenter_confirm_alloc(void) {
+	return message_alloc2(sizeof(struct SMsgReenterConfirm), SMSG_REENTER_CONFIRM);
+}
+
 struct SMessage* message_text_alloc(part_id_t source, const char* text) {
 	size_t size          = sizeof(struct SMsgText) + strlen(text) + 1;
 	struct SMsgText* msg = (struct SMsgText*)message_alloc2(size, SMSG_TEXT);
