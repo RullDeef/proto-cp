@@ -186,6 +186,7 @@ enum SError sconn_connect_secure(struct SConnection **con, struct SEndpoint *ep)
 enum SError sconn_disconnect(struct SConnection **con) {
 	if (con == NULL || *con == NULL)
 		return SELECON_INVALID_ARG;
+#ifdef SELECON_USE_SECURE_CONNECTION
 	if ((*con)->ssl_ctx != NULL) {
 		if ((*con)->ssl != NULL) {
 			SSL_shutdown((*con)->ssl);  // TODO: solve EPIPE here (p2p reject test)
@@ -194,6 +195,7 @@ enum SError sconn_disconnect(struct SConnection **con) {
 		SSL_CTX_free((*con)->ssl_ctx);
 		ssl_destroy();
 	}
+#endif
 	close((*con)->fd);
 	free(*con);
 	*con = NULL;
@@ -203,6 +205,7 @@ enum SError sconn_disconnect(struct SConnection **con) {
 enum SError sconn_send(struct SConnection *con, struct SMessage *msg) {
 	if (con == NULL || msg == NULL)
 		return SELECON_INVALID_ARG;
+#ifdef SELECON_USE_SECURE_CONNECTION
 	if (con->ssl != NULL) {
 		int ret = 0;
 	ssl_retry:
@@ -214,7 +217,9 @@ enum SError sconn_send(struct SConnection *con, struct SMessage *msg) {
 				default: ERR_print_errors_fp(stderr); return SELECON_CON_ERROR;
 			}
 		}
-	} else {
+	} else
+#endif
+	{
 		if (send(con->fd, msg, msg->size, 0) == -1) {
 			perror("send");
 			return SELECON_CON_ERROR;
@@ -225,11 +230,14 @@ enum SError sconn_send(struct SConnection *con, struct SMessage *msg) {
 
 static int sconn_recv_part(struct SConnection *con, void *buffer, size_t size) {
 	int ret = 0;
+#ifdef SELECON_USE_SECURE_CONNECTION
 	if (con->ssl != NULL) {
 		ret = SSL_read(con->ssl, buffer, size);
 		if (ret == -1)
 			ERR_print_errors_fp(stderr);
-	} else {
+	} else
+#endif
+	{
 		ret = recv(con->fd, buffer, size, 0);
 		if (ret == -1)
 			perror("recv");
@@ -245,13 +253,14 @@ enum SError sconn_recv(struct SConnection *con, struct SMessage **msg) {
 	if (ret == -1)
 		return SELECON_CON_ERROR;
 	else if (ret == 0) {
-		// close ssl connection if any
-		if (con->ssl != NULL) {
+#ifdef SELECON_USE_SECURE_CONNECTION
+		if (con->ssl != NULL) {  // close ssl connection if any
 			SSL_free(con->ssl);
 			con->ssl = NULL;
 			SSL_CTX_free(con->ssl_ctx);
 			con->ssl_ctx = NULL;
 		}
+#endif
 		return SELECON_CON_HANGUP;
 	}
 	if (*msg == NULL || (*msg)->size < size) {
@@ -294,12 +303,14 @@ enum SError sconn_recv_one(struct SConnection **cons,
 		if (pollfd[i].revents & POLLHUP) {
 			// participant disconnected
 			*ready_index = i;
+#ifdef SELECON_USE_SECURE_CONNECTION
 			if (cons[i]->ssl != NULL) {
 				SSL_free(cons[i]->ssl);
 				cons[i]->ssl = NULL;
 				SSL_CTX_free(cons[i]->ssl_ctx);
 				cons[i]->ssl_ctx = NULL;
 			}
+#endif
 			return SELECON_CON_HANGUP;
 		} else if (pollfd[i].revents & POLLIN) {
 			*ready_index = i;

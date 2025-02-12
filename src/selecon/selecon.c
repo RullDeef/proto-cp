@@ -24,6 +24,7 @@
 #include "participant.h"
 #include "stime.h"
 #include "stream.h"
+#include "verify.h"
 
 static int init_recursive_mutex(pthread_mutex_t *mutex) {
 	pthread_mutexattr_t attr;
@@ -301,6 +302,8 @@ static enum SError handle_invite(struct SContext *ctx,
 	enum SError err = do_handshake_srv(ctx, con, invite);
 	if (err != SELECON_OK)
 		return err;
+	if (!verify_conf_id(invite->conf_id, invite->part_id, invite->conf_start_ts))
+		return SELECON_INVITE_INVALID;
 	if (ctx->conf_id != invite->conf_id) {
 		selecon_leave_conference(ctx);  // leave old conference
 		ctx->conf_id       = invite->conf_id;
@@ -433,7 +436,6 @@ enum SError selecon_context_init(struct SContext *ctx,
 		    &default_ep, SELECON_DEFAULT_LISTEN_ADDR, SELECON_DEFAULT_LISTEN_PORT);
 		ep = &default_ep;
 	}
-	ctx->conf_id       = rand();
 	ctx->conf_start_ts = get_curr_timestamp();
 	int ret            = pthread_rwlock_init(&ctx->part_rwlock, NULL);
 	if (ret != 0)
@@ -446,6 +448,7 @@ enum SError selecon_context_init(struct SContext *ctx,
 	ctx->text_handler        = text_handler;
 	ctx->initialized         = true;
 	ctx->conf_thread_working = false;
+	ctx->conf_id             = generate_conf_id(ctx->self.id, ctx->conf_start_ts);
 	if (pthread_create(&ctx->listener_thread, NULL, invite_worker, ctx) != 0) {
 		spart_destroy(&ctx->self);
 		pthread_rwlock_destroy(&ctx->part_rwlock);
@@ -629,8 +632,8 @@ enum SError selecon_leave_conference(struct SContext *context) {
 	context->nb_participants = 1;
 	pthread_rwlock_unlock(&context->part_rwlock);
 	message_free((struct SMessage **)&msg);
-	context->conf_id       = rand();
 	context->conf_start_ts = get_curr_timestamp();
+	context->conf_id       = generate_conf_id(context->self.id, context->conf_start_ts);
 	return SELECON_OK;
 }
 
