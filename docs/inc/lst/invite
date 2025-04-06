@@ -1,28 +1,29 @@
 static enum SError invite_connected(struct SContext *context,
-    struct SConnection *con, part_id_t *out_part_id) {
-  struct SMessage *inviteMsg = message_invite_alloc(
-      context->conf_id, context->conf_start_ts, context->self.id, context->self.name);
-  struct SMsgInviteAccept *acceptMsg = NULL;
-  enum SError err                    = do_handshake_client(con, inviteMsg, &acceptMsg);
-  if (err != SELECON_OK || acceptMsg == NULL)
-    return err;
-  // send other participants info about invitee
-  struct SMsgPartPresence *msg = message_part_presence_alloc(1);
-  msg->states[0].id            = acceptMsg->id;
-  msg->states[0].ep            = acceptMsg->ep;
-  msg->states[0].role          = SROLE_CLIENT;
-  msg->states[0].state         = PART_JOIN;
-  pthread_rwlock_wrlock(&context->part_rwlock);
-  for (size_t i = 0; i < context->nb_participants - 1; ++i)
-    sconn_send(context->participants[i].connection, (struct SMessage *)msg);
-  add_participant(context, acceptMsg->id, acceptMsg->name, con);
-  if (context->nb_participants == 2 && !context->conf_thread_working) {
-    pthread_create(&context->conf_thread, NULL, conf_worker, context);
-    pthread_setname_np(context->conf_thread, "conf");
-  }
-  pthread_rwlock_unlock(&context->part_rwlock);
-  *out_part_id = acceptMsg->id;
-  message_free((struct SMessage **)&msg);
-  message_free((struct SMessage **)&acceptMsg);
-  return SELECON_OK;
+                                    struct SConnection *con,
+                                    part_id_t *out_part_id) {
+	struct SMessage *inviteMsg = message_invite_alloc(
+	    context->conf_id, context->conf_start_ts, context->self.id, context->self.name);
+	struct SMsgInviteAccept *acceptMsg = NULL;
+	enum SError err                    = do_handshake_client(con, inviteMsg, &acceptMsg);
+	if (err != SELECON_OK || acceptMsg == NULL)
+		return err;
+	// send other participants info about invitee
+	struct SMsgPartPresence *msg = message_part_presence_alloc(1);
+	msg->states[0].id            = acceptMsg->id;
+	msg->states[0].ep            = acceptMsg->ep;
+	msg->states[0].role          = SROLE_CLIENT;
+	msg->states[0].state         = PART_JOIN;
+	pthread_rwlock_wrlock(&context->part_rwlock);
+	for (size_t i = 0; i < context->nb_participants - 1; ++i)
+		sconn_send(context->participants[i].connection, (struct SMessage *)msg);
+	add_participant(context, acceptMsg->id, acceptMsg->name, con);
+	if (context->nb_participants == 2 && !context->conf_thread_working) {
+		pthread_create(&context->conf_thread, NULL, conf_worker, context);
+		pthread_setname_np(context->conf_thread, "conf");
+	}
+	pthread_rwlock_unlock(&context->part_rwlock);
+	*out_part_id = acceptMsg->id;
+	message_free((struct SMessage **)&msg);
+	message_free((struct SMessage **)&acceptMsg);
+	return SELECON_OK;
 }

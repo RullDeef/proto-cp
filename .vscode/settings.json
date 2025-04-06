@@ -1,0 +1,28 @@
+{
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "selecon.h": "c",
+    "version.h": "c",
+    "message.h": "c",
+    "stypes.h": "c",
+    "role.h": "c",
+    "error.h": "c",
+    "participant.h": "c",
+    "endpoint.h": "c",
+    "context.h": "c",
+    "stream.h": "c",
+    "swresample.h": "c",
+    "buffersink.h": "c",
+    "dev_io.h": "c",
+    "media_profile.h": "c",
+    "avcodec.h": "c",
+    "bio.h": "c",
+    "stdatomic.h": "c",
+    "stime.h": "c",
+    "stats.h": "c",
+    "md5.h": "c",
+    "opensslconf.h": "c",
+    "crypt.h": "c"
+  }
+}

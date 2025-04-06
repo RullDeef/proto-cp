@@ -193,6 +193,13 @@
       \field{howpublished}{[Электронный ресурс]}
       \field{title}{OpenSSL --- \url{https://www.openssl.org/} (дата обращения: 10.12.2024)}
     \endentry
+    \entry{nat-types}{misc}{}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{[Электронный ресурс]}
+      \field{title}{Understand NAT to Enable Peer-To-Peer Communication on IOS and IOS XE Routers - Cisco --- \url{https://www.cisco.com/c/en/us/support/docs/ip/network-address-translation-nat/217599-understand-nat-to-enable-peer-to-peer-co.html} (дата обращения: 12.12.2024)}
+    \endentry
     \entry{aac}{misc}{useauthor=false}
       \name{author}{5}{}{%
         {{hash=3a9745c5f5f62c25d2ec92b2ccb47bba}{%
@@ -227,8 +234,8 @@
       \strng{authorbibnamehash}{c3cc8e40016e9d5f9a96cc9c0920af49}
       \strng{authornamehash}{c3cc8e40016e9d5f9a96cc9c0920af49}
       \strng{authorfullhash}{910e3a58aaf721ebea84ff29b8adfd8f}
-      \field{sortinit}{6}
-      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
       \field{labeltitlesource}{title}
       \field{abstract}{This document describes Real-Time Transport Protocol (RTP) payload formats for carrying each of MPEG-4 Audio and MPEG-4 Visual bitstreams without using MPEG-4 Systems. {[}STANDARDS-TRACK{]}}
       \field{howpublished}{RFC 3016}
@@ -250,8 +257,8 @@
       \endverb
     \endentry
     \entry{h264}{misc}{}
-      \field{sortinit}{7}
-      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
       \field{labeltitlesource}{title}
       \field{howpublished}{(Электронный ресурс)}
       \field{title}{H.264: Advanced video coding for generic audiovisual services --- \url{https://www.itu.int/rec/T-REC-H.264} (дата обращения: 10.12.2024)}
@@ -273,8 +280,8 @@
       \strng{authorbibnamehash}{fbed942ce41bbd27cb1ee6a803bdf541}
       \strng{authornamehash}{fbed942ce41bbd27cb1ee6a803bdf541}
       \strng{authorfullhash}{fbed942ce41bbd27cb1ee6a803bdf541}
-      \field{sortinit}{8}
-      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{abstract}{This document specifies version 1.3 of the Transport Layer Security (TLS) protocol. TLS allows client/server applications to communicate over the Internet in a way that is designed to prevent eavesdropping, tampering, and message forgery. This document updates RFCs 5705 and 6066, and obsoletes RFCs 5077, 5246, and 6961. This document also specifies new requirements for TLS 1.2 implementations.}
@@ -297,8 +304,8 @@
       \endverb
     \endentry
     \entry{cmake}{misc}{}
-      \field{sortinit}{9}
-      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
       \field{labeltitlesource}{title}
       \field{howpublished}{(Электронный ресурс)}
       \field{title}{CMake --- Upgrade Your Software Build System --- \url{https://cmake.org/} (дата обращения: 20.12.2024)}
@@ -316,13 +323,6 @@
       \field{labeltitlesource}{title}
       \field{howpublished}{(Электронный ресурс)}
       \field{title}{GoogleTest User's Guide --- \url{https://google.github.io/googletest/} (дата обращения: 21.12.2024)}
-    \endentry
-    \entry{wireshark}{misc}{}
-      \field{sortinit}{1}
-      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
-      \field{labeltitlesource}{title}
-      \field{howpublished}{(Электронный ресурс)}
-      \field{title}{Wireshark · Go Deep --- \url{https://www.wireshark.org/} (дата обращения: 23.12.2024)}
     \endentry
   \enddatalist
 \endrefsection
